@@ -8,7 +8,7 @@ It's not the fastest version here, if you want to get the fastest one, please se
 
 temple3x@gmail.com
 
-4GB/s per physics core
+more than 5GB/s per physics core
 
  * Coding over in GF(2^8).
  * Primitive Polynomial: x^8 + x^4 + x^3 + x^2 + 1 (0x1d)

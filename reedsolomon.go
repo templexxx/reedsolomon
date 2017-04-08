@@ -36,9 +36,7 @@ func New(d, p int) (*rs, error) {
 		parity: p,
 		shards: d + p,
 	}
-	if hasAVX2() {
-		r.ins = avx2
-	} else if hasSSSE3() {
+	if hasSSSE3() {
 		r.ins = ssse3
 	} else {
 		return &r, ErrNoSupportINS
@@ -61,9 +59,6 @@ func checkShards(d, p int) error {
 	}
 	return nil
 }
-
-//go:noescape
-func hasAVX2() bool
 
 //go:noescape
 func hasSSSE3() bool
