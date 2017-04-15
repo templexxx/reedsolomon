@@ -38,7 +38,7 @@ go get github.com/templexxx/reedsolomon
 
 This section assumes you know the basics of Reed-Solomon encoding. A good start is this [Backblaze blog post](https://www.backblaze.com/blog/reed-solomon/).
 
-There are only two public function in the package: Encode, Reconst and NewMatrix
+There are only three public function in the package: Encode, Reconst and NewMatrix
 
 NewMatrix: return a [][]byte for encode and reconst
 
