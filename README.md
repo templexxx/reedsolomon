@@ -4,7 +4,7 @@ Reed-Solomon Erasure Code engine in pure Go.
 
 More info in [my blogs](http://www.templex.xyz/blog/101/reedsolomon.html) (in Chinese)
 
-It's not the fastest version here, if you want to get the fastest one, please send me email:
+It's not the fastest version here, if you want to get the fastest one, please send me email (I'm sorry for that, I wouldn't do this if I didn't have to):
 
 temple3x@gmail.com
 
