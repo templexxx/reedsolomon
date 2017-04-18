@@ -4,7 +4,7 @@ import "sort"
 
 // dp : data+parity shards, all shards size must be equal
 // lost : row number in dp
-func (r *rs) Reconst(dp matrix, lost []int, repairParity bool) error {
+func (r *Rs) Reconst(dp matrix, lost []int, repairParity bool) error {
 	if len(dp) != r.shards {
 		return ErrTooFewShards
 	}

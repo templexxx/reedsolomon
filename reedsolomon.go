@@ -7,7 +7,7 @@ package reedsolomon
 
 import "errors"
 
-type rs struct {
+type Rs struct {
 	data   int    // Number of data shards
 	parity int    // Number of parity shards
 	shards int    // Total number of shards
@@ -26,12 +26,12 @@ var ErrTooManyShards = errors.New("reedsolomon: too many shards given for encodi
 var ErrNoSupportINS = errors.New("reedsolomon: there is no avx2 or ssse3")
 
 // New : create a encoding matrix for encoding, reconstruction
-func New(d, p int) (*rs, error) {
+func New(d, p int) (*Rs, error) {
 	err := checkShards(d, p)
 	if err != nil {
 		return nil, err
 	}
-	r := rs{
+	r := Rs{
 		data:   d,
 		parity: p,
 		shards: d + p,

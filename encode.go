@@ -6,7 +6,7 @@ const unitSize int = 1024
 
 // Encode : cauchy_matrix * data_matrix(input) -> parity_matrix(output)
 // dp : data_matrix(upper) parity_matrix(lower, empty now)
-func (r *rs) Encode(dp matrix) error {
+func (r *Rs) Encode(dp matrix) error {
 	if len(dp) != r.shards {
 		return ErrTooFewShards
 	}
