@@ -4,7 +4,7 @@ import "sort"
 
 // dp : Data+Parity Shards, all Shards size must be equal
 // lost : row number in dp
-func (r *RS) Reconst(dp matrix, lost []int, repairParity bool) error {
+func (r *RS) Reconst(dp Matrix, lost []int, repairParity bool) error {
 	if len(dp) != r.Shards {
 		return ErrTooFewShards
 	}
@@ -33,7 +33,7 @@ func (r *RS) Reconst(dp matrix, lost []int, repairParity bool) error {
 	return nil
 }
 
-func reconstData(encodeMatrix, dp matrix, dataLost, parityLost []int, numData, size, ins int) error {
+func reconstData(encodeMatrix, dp Matrix, dataLost, parityLost []int, numData, size, ins int) error {
 	decodeMatrix := NewMatrix(numData, numData)
 	survivedMap := make(map[int]int)
 	numShards := len(encodeMatrix)
@@ -61,7 +61,7 @@ func reconstData(encodeMatrix, dp matrix, dataLost, parityLost []int, numData, s
 	if err != nil {
 		return err
 	}
-	// fill generator matrix with lost rows of decode matrix
+	// fill generator matrix with lost rows of decode Matrix
 	numDL := len(dataLost)
 	gen := NewMatrix(numDL, numData)
 	outputMap := make(map[int]int)
@@ -73,7 +73,7 @@ func reconstData(encodeMatrix, dp matrix, dataLost, parityLost []int, numData, s
 	return nil
 }
 
-func reconstParity(encodeMatrix, dp matrix, parityLost []int, numData, size, ins int) {
+func reconstParity(encodeMatrix, dp Matrix, parityLost []int, numData, size, ins int) {
 	gen := NewMatrix(len(parityLost), numData)
 	outputMap := make(map[int]int)
 	for i := range gen {

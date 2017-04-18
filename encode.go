@@ -6,7 +6,7 @@ const unitSize int = 1024
 
 // Encode : cauchy_matrix * data_matrix(input) -> parity_matrix(output)
 // dp : data_matrix(upper) parity_matrix(lower, empty now)
-func (r *RS) Encode(dp matrix) error {
+func (r *RS) Encode(dp Matrix) error {
 	if len(dp) != r.Shards {
 		return ErrTooFewShards
 	}
@@ -26,7 +26,7 @@ func (r *RS) Encode(dp matrix) error {
 	return nil
 }
 
-func encodeSSSE3(gen, dp matrix, numIn, numOut, size int, inMap, outMap map[int]int) {
+func encodeSSSE3(gen, dp Matrix, numIn, numOut, size int, inMap, outMap map[int]int) {
 	start := 0
 	do := unitSize
 	for start < size {
@@ -40,7 +40,7 @@ func encodeSSSE3(gen, dp matrix, numIn, numOut, size int, inMap, outMap map[int]
 	}
 }
 
-func encodeWorkerS(gen, dp matrix, start, do, numIn, numOut int, inMap, outMap map[int]int) {
+func encodeWorkerS(gen, dp Matrix, start, do, numIn, numOut int, inMap, outMap map[int]int) {
 	end := start + do
 	for i := 0; i < numIn; i++ {
 		j := inMap[i]
@@ -57,7 +57,7 @@ func encodeWorkerS(gen, dp matrix, start, do, numIn, numOut int, inMap, outMap m
 	}
 }
 
-func encodeRemainS(start, size int, gen, dp matrix, numIn, numOut int, inMap, outMap map[int]int) {
+func encodeRemainS(start, size int, gen, dp Matrix, numIn, numOut int, inMap, outMap map[int]int) {
 	do := size - start
 	for i := 0; i < numIn; i++ {
 		j := inMap[i]
@@ -76,7 +76,7 @@ func encodeRemainS(start, size int, gen, dp matrix, numIn, numOut int, inMap, ou
 
 var ErrShardSize = errors.New("reedsolomon: Shards size equal 0 or not match")
 
-func checkShardSize(m matrix) (int, error) {
+func checkShardSize(m Matrix) (int, error) {
 	size := len(m[0])
 	if size == 0 {
 		return size, ErrShardSize

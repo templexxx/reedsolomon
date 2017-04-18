@@ -118,12 +118,12 @@ func benchmarkInvert(b *testing.B, size int) {
 }
 
 // new a matrix with Data
-func newMatrixData(data [][]byte) matrix {
-	m := matrix(data)
+func newMatrixData(data [][]byte) Matrix {
+	m := Matrix(data)
 	return m
 }
 
-func (m matrix) string() string {
+func (m Matrix) string() string {
 	rowOut := make([]string, 0, len(m))
 	for _, row := range m {
 		colOut := make([]string, 0, len(row))

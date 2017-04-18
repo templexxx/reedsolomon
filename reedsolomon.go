@@ -11,8 +11,8 @@ type RS struct {
 	Data   int    // Number of Data Shards
 	Parity int    // Number of Parity Shards
 	Shards int    // Total number of Shards
-	M      matrix // encoding matrix, identity matrix(upper) + generator matrix(lower)
-	Gen    matrix // generator matrix(cauchy matrix)
+	M      Matrix // encoding matrix, identity Matrix(upper) + generator Matrix(lower)
+	Gen    Matrix // generator matrix(cauchy Matrix)
 	INS    int    // Extensions Instruction(AVX2 or SSSE3)
 }
 
