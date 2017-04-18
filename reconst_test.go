@@ -44,13 +44,13 @@ func TestReconst(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(store[0], dp[0]) {
-		t.Fatal("reconst data mismatch: dp[0]")
+		t.Fatal("reconst Data mismatch: dp[0]")
 	}
 	if !bytes.Equal(store[1], dp[4]) {
-		t.Fatal("reconst data mismatch: dp[4]")
+		t.Fatal("reconst Data mismatch: dp[4]")
 	}
 	if !bytes.Equal(store[2], dp[12]) {
-		t.Fatal("reconst data mismatch: dp[12]")
+		t.Fatal("reconst Data mismatch: dp[12]")
 	}
 	// Reconstruct with 9 dp present (should fail)
 	lost = append(lost, 11)
@@ -76,7 +76,7 @@ func BenchmarkReconst10x4x128KRepair4(b *testing.B) {
 	benchmarkReconst(b, 10, 4, 128*1024, 4)
 }
 
-//// lost only happened in data
+//// lost only happened in Data
 func BenchmarkReconst10x4x128KRepair1Data(b *testing.B) {
 	benchmarkReconstData(b, 10, 4, 128*1024, 1)
 }
@@ -93,7 +93,7 @@ func BenchmarkReconst10x4x128KRepair4Data(b *testing.B) {
 	benchmarkReconstData(b, 10, 4, 128*1024, 4)
 }
 
-// lost only happened in data
+// lost only happened in Data
 func benchmarkReconstData(b *testing.B, d, p, size, repair int) {
 	r, err := New(d, p)
 	if err != nil {

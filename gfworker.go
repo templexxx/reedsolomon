@@ -12,7 +12,7 @@ func gfMulSSSE3(low, high, in, out []byte)
 //go:noescape
 func gfMulXorSSSE3(low, high, in, out []byte)
 
-// use avx2 to calc remain
+// use AVX2 to calc remain
 func gfMulRemain(coeff byte, input, output []byte, size int) {
 	var done int
 	if size < 32 {
@@ -33,7 +33,7 @@ func gfMulRemain(coeff byte, input, output []byte, size int) {
 	}
 }
 
-// use avx2 to calc remain
+// use AVX2 to calc remain
 func gfMulRemainXor(coeff byte, input, output []byte, size int) {
 	var done int
 	if size < 32 {
@@ -54,7 +54,7 @@ func gfMulRemainXor(coeff byte, input, output []byte, size int) {
 	}
 }
 
-// use ssse3 to calc remain
+// use SSSE3 to calc remain
 func gfMulRemainS(coeff byte, input, output []byte, size int) {
 	var done int
 	if size < 16 {
@@ -75,7 +75,7 @@ func gfMulRemainS(coeff byte, input, output []byte, size int) {
 	}
 }
 
-// use ssse3 to calc remain
+// use SSSE3 to calc remain
 func gfMulRemainXorS(coeff byte, input, output []byte, size int) {
 	var done int
 	if size < 16 {

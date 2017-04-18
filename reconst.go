@@ -2,10 +2,10 @@ package reedsolomon
 
 import "sort"
 
-// dp : data+parity shards, all shards size must be equal
+// dp : Data+Parity Shards, all Shards size must be equal
 // lost : row number in dp
-func (r *Rs) Reconst(dp matrix, lost []int, repairParity bool) error {
-	if len(dp) != r.shards {
+func (r *RS) Reconst(dp matrix, lost []int, repairParity bool) error {
+	if len(dp) != r.Shards {
 		return ErrTooFewShards
 	}
 	size, err := checkShardSize(dp)
@@ -15,20 +15,20 @@ func (r *Rs) Reconst(dp matrix, lost []int, repairParity bool) error {
 	if len(lost) == 0 {
 		return nil
 	}
-	if len(lost) > r.parity {
+	if len(lost) > r.Parity {
 		return ErrTooFewShards
 	}
-	dataLost, parityLost := splitLost(lost, r.data)
+	dataLost, parityLost := splitLost(lost, r.Data)
 	sort.Ints(dataLost)
 	sort.Ints(parityLost)
 	if len(dataLost) > 0 {
-		err = reconstData(r.m, dp, dataLost, parityLost, r.data, size, r.ins)
+		err = reconstData(r.M, dp, dataLost, parityLost, r.Data, size, r.INS)
 		if err != nil {
 			return err
 		}
 	}
 	if len(parityLost) > 0 && repairParity {
-		reconstParity(r.m, dp, parityLost, r.data, size, r.ins)
+		reconstParity(r.M, dp, parityLost, r.Data, size, r.INS)
 	}
 	return nil
 }
@@ -37,14 +37,14 @@ func reconstData(encodeMatrix, dp matrix, dataLost, parityLost []int, numData, s
 	decodeMatrix := NewMatrix(numData, numData)
 	survivedMap := make(map[int]int)
 	numShards := len(encodeMatrix)
-	// fill with survived data
+	// fill with survived Data
 	for i := 0; i < numData; i++ {
 		if survived(i, dataLost) {
 			decodeMatrix[i] = encodeMatrix[i]
 			survivedMap[i] = i
 		}
 	}
-	// "borrow" from survived parity
+	// "borrow" from survived Parity
 	k := numData
 	for _, dl := range dataLost {
 		for j := k; j < numShards; j++ {

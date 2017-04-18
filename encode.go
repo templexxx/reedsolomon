@@ -6,8 +6,8 @@ const unitSize int = 1024
 
 // Encode : cauchy_matrix * data_matrix(input) -> parity_matrix(output)
 // dp : data_matrix(upper) parity_matrix(lower, empty now)
-func (r *Rs) Encode(dp matrix) error {
-	if len(dp) != r.shards {
+func (r *RS) Encode(dp matrix) error {
+	if len(dp) != r.Shards {
 		return ErrTooFewShards
 	}
 	size, err := checkShardSize(dp)
@@ -16,13 +16,13 @@ func (r *Rs) Encode(dp matrix) error {
 	}
 	inMap := make(map[int]int)
 	outMap := make(map[int]int)
-	for i := 0; i < r.data; i++ {
+	for i := 0; i < r.Data; i++ {
 		inMap[i] = i
 	}
-	for i := r.data; i < r.shards; i++ {
-		outMap[i-r.data] = i
+	for i := r.Data; i < r.Shards; i++ {
+		outMap[i-r.Data] = i
 	}
-	encodeSSSE3(r.gen, dp, r.data, r.parity, size, inMap, outMap)
+	encodeSSSE3(r.Gen, dp, r.Data, r.Parity, size, inMap, outMap)
 	return nil
 }
 
@@ -48,7 +48,7 @@ func encodeWorkerS(gen, dp matrix, start, do, numIn, numOut int, inMap, outMap m
 		for oi := 0; oi < numOut; oi++ {
 			k := outMap[oi]
 			c := gen[oi][i]
-			if i == 0 { // it means don't need to copy parity data for xor
+			if i == 0 { // it means don't need to copy Parity Data for xor
 				gfMulSSSE3(mulTableLow[c][:], mulTableHigh[c][:], in[start:end], dp[k][start:end])
 			} else {
 				gfMulXorSSSE3(mulTableLow[c][:], mulTableHigh[c][:], in[start:end], dp[k][start:end])
@@ -74,7 +74,7 @@ func encodeRemainS(start, size int, gen, dp matrix, numIn, numOut int, inMap, ou
 	}
 }
 
-var ErrShardSize = errors.New("reedsolomon: shards size equal 0 or not match")
+var ErrShardSize = errors.New("reedsolomon: Shards size equal 0 or not match")
 
 func checkShardSize(m matrix) (int, error) {
 	size := len(m[0])

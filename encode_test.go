@@ -69,14 +69,14 @@ func TestVerifySSSE3_10x4x9999(t *testing.T) {
 	if !hasSSSE3() {
 		t.Fatal("Verify SSSE3: there is no SSSE3")
 	}
-	verifyFastEncode(t, 10, 4, 9999, ssse3)
+	verifyFastEncode(t, 10, 4, 9999, SSSE3)
 }
 
 func BenchmarkSSSE3Encode10x4x128K(b *testing.B) {
 	if !hasSSSE3() {
 		b.Fatal("benchSSSE3: there is no SSSE3")
 	}
-	benchSIMDEncode(b, 10, 4, 128*1024, ssse3)
+	benchSIMDEncode(b, 10, 4, 128*1024, SSSE3)
 }
 
 func BenchmarkBaseEncode10x4x128K(b *testing.B) {
@@ -84,16 +84,16 @@ func BenchmarkBaseEncode10x4x128K(b *testing.B) {
 }
 
 func BenchmarkSSSE3Encode10x4x256K(b *testing.B) {
-	benchSIMDEncode(b, 10, 4, 256*1024, ssse3)
+	benchSIMDEncode(b, 10, 4, 256*1024, SSSE3)
 }
 
 func BenchmarkSSSE3Encode10x4x36M(b *testing.B) {
-	benchSIMDEncode(b, 10, 4, 4*1024*1024, ssse3)
+	benchSIMDEncode(b, 10, 4, 4*1024*1024, SSSE3)
 }
 
-func (r *Rs) baseEncode(dp matrix) error {
+func (r *RS) baseEncode(dp matrix) error {
 	// check args
-	if len(dp) != r.shards {
+	if len(dp) != r.Shards {
 		return ErrTooFewShards
 	}
 	_, err := checkShardSize(dp)
@@ -101,9 +101,9 @@ func (r *Rs) baseEncode(dp matrix) error {
 		return err
 	}
 	// encoding
-	input := dp[0:r.data]
-	output := dp[r.data:]
-	baseRunner(r.gen, input, output, r.data, r.parity)
+	input := dp[0:r.Data]
+	output := dp[r.Data:]
+	baseRunner(r.Gen, input, output, r.Data, r.Parity)
 	return nil
 }
 
@@ -145,7 +145,7 @@ func verifyFastEncode(t *testing.T, d, p, size, ins int) {
 		rand.Seed(int64(i))
 		fillRandom(dp[i])
 	}
-	r.ins = ins
+	r.INS = ins
 	err = r.Encode(dp)
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func verifyFastEncode(t *testing.T, d, p, size, ins int) {
 	}
 	for i, asm := range dp {
 		if !bytes.Equal(asm, mDP[i]) {
-			t.Fatal("verify failed, no match base version; shards: ", i)
+			t.Fatal("verify failed, no match base version; Shards: ", i)
 		}
 	}
 }
@@ -171,8 +171,8 @@ func benchSIMDEncode(b *testing.B, d, p, size, ins int) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	if ins == ssse3 {
-		r.ins = ins
+	if ins == SSSE3 {
+		r.INS = ins
 	}
 	dp := NewMatrix(d+p, size)
 	for i := 0; i < d; i++ {

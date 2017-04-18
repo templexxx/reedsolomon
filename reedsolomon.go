@@ -7,45 +7,45 @@ package reedsolomon
 
 import "errors"
 
-type Rs struct {
-	data   int    // Number of data shards
-	parity int    // Number of parity shards
-	shards int    // Total number of shards
-	m      matrix // encoding matrix, identity matrix(upper) + generator matrix(lower)
-	gen    matrix // generator matrix(cauchy matrix)
-	ins    int    // Extensions Instruction(avx2 or ssse3)
+type RS struct {
+	Data   int    // Number of Data Shards
+	Parity int    // Number of Parity Shards
+	Shards int    // Total number of Shards
+	M      matrix // encoding matrix, identity matrix(upper) + generator matrix(lower)
+	Gen    matrix // generator matrix(cauchy matrix)
+	INS    int    // Extensions Instruction(AVX2 or SSSE3)
 }
 
 const (
-	avx2  = 0
-	ssse3 = 1
+	AVX2  = 0
+	SSSE3 = 1
 )
 
-var ErrTooFewShards = errors.New("reedsolomon: too few shards given for encoding")
-var ErrTooManyShards = errors.New("reedsolomon: too many shards given for encoding")
-var ErrNoSupportINS = errors.New("reedsolomon: there is no avx2 or ssse3")
+var ErrTooFewShards = errors.New("reedsolomon: too few Shards given for encoding")
+var ErrTooManyShards = errors.New("reedsolomon: too many Shards given for encoding")
+var ErrNoSupportINS = errors.New("reedsolomon: there is no AVX2 or SSSE3")
 
 // New : create a encoding matrix for encoding, reconstruction
-func New(d, p int) (*Rs, error) {
+func New(d, p int) (*RS, error) {
 	err := checkShards(d, p)
 	if err != nil {
 		return nil, err
 	}
-	r := Rs{
-		data:   d,
-		parity: p,
-		shards: d + p,
+	r := RS{
+		Data:   d,
+		Parity: p,
+		Shards: d + p,
 	}
 	if hasSSSE3() {
-		r.ins = ssse3
+		r.INS = SSSE3
 	} else {
 		return &r, ErrNoSupportINS
 	}
-	e := genEncodeMatrix(r.shards, d) // create encoding matrix
-	r.m = e
-	r.gen = NewMatrix(p, d)
-	for i := range r.gen {
-		r.gen[i] = r.m[d+i]
+	e := genEncodeMatrix(r.Shards, d) // create encoding matrix
+	r.M = e
+	r.Gen = NewMatrix(p, d)
+	for i := range r.Gen {
+		r.Gen[i] = r.M[d+i]
 	}
 	return &r, err
 }

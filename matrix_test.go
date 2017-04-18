@@ -117,7 +117,7 @@ func benchmarkInvert(b *testing.B, size int) {
 	}
 }
 
-// new a matrix with data
+// new a matrix with Data
 func newMatrixData(data [][]byte) matrix {
 	m := matrix(data)
 	return m
