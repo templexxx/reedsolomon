@@ -2,13 +2,15 @@
 
 Reed-Solomon Erasure Code engine in pure Go.
 
+more than 5GB/s per physics core, almost as fast as Intel ISA-L
+
+![isal](http://templex.xyz/images/reedsolomon/isal.png)
+
 More info in [my blogs](http://www.templex.xyz/blog/101/reedsolomon.html) (in Chinese)
 
 It's not the fastest version here, if you want to get the fastest one, please send me email (I'm sorry for that, I wouldn't do this if I didn't have to):
 
 temple3x@gmail.com
-
-more than 5GB/s per physics core
 
  * Coding over in GF(2^8).
  * Primitive Polynomial: x^8 + x^4 + x^3 + x^2 + 1 (0x1d)
@@ -61,7 +63,7 @@ Single core work here(fast version):
 
 | Encode/Reconst | data+parity/data+parity(lost_data)   | Speed (MB/S) |
 |----------------|-------------------|--------------|
-| E              |      10+4       |5558.60  |
+| E              |      10+4       |5849.41  |
 | R              |      10+4(1)       | 19050.82 |
 | R              |      10+4(2)       | 9725.64  |
 | R              |      10+4(3)       | 6974.09  |
