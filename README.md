@@ -4,6 +4,11 @@ Reed-Solomon Erasure Code engine in pure Go.
 
 more than 5GB/s per physics core, almost as fast as Intel ISA-L
 
+10+4 encode run on AWS t2.micro Intel(R) Xeon(R) CPU E5-2676 v3 @ 2.40GHz, Memory 1GB, ubuntu-trusty-16.04-amd64:
+
+xxx is my code
+intel is Intel ISA-L
+
 ![isal](http://templex.xyz/images/reedsolomon/isal.jpg)
 
 More info in [my blogs](http://www.templex.xyz/blog/101/reedsolomon.html) (in Chinese)
