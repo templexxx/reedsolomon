@@ -91,7 +91,7 @@ func BenchmarkSSSE3Encode10x4x36M(b *testing.B) {
 	benchSIMDEncode(b, 10, 4, 4*1024*1024, ssse3)
 }
 
-func (r *rs) baseEncode(dp matrix) error {
+func (r *Rs) baseEncode(dp matrix) error {
 	// check args
 	if len(dp) != r.shards {
 		return ErrTooFewShards
