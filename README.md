@@ -16,6 +16,8 @@ xxx is my code
 
 intel is Intel ISA-L
 
+faster than ISA-L when the data_size is small
+
 ![isal](http://templex.xyz/images/reedsolomon/perfnew.jpg)
 
 More info in [my blogs](http://www.templex.xyz/blog/101/reedsolomon.html) (in Chinese)
