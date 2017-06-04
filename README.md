@@ -1,6 +1,12 @@
 # Reed-Solomon
 
-Reed-Solomon Erasure Code engine in pure Go.
+## WARNING
+
+It's not the fastest version here, if you want to get the fastest one, please send me email (I'm sorry for that, I wouldn't do this if I didn't have to):
+
+temple3x@gmail.com
+
+## Reed-Solomon Erasure Code engine in pure Go.
 
 more than 5GB/s per physics core, almost as fast as Intel ISA-L
 
@@ -14,9 +20,7 @@ intel is Intel ISA-L
 
 More info in [my blogs](http://www.templex.xyz/blog/101/reedsolomon.html) (in Chinese)
 
-It's not the fastest version here, if you want to get the fastest one, please send me email (I'm sorry for that, I wouldn't do this if I didn't have to):
 
-temple3x@gmail.com
 
  * Coding over in GF(2^8).
  * Primitive Polynomial: x^8 + x^4 + x^3 + x^2 + 1 (0x1d)
