@@ -1,28 +1,30 @@
 # Reed-Solomon
 
-## WARNING
-
-It's not the fastest version here, if you want to get the fastest one, please send me email (I'm sorry for that, I wouldn't do this if I didn't have to):
-
-temple3x@gmail.com
-
 ## Reed-Solomon Erasure Code engine in pure Go.
 
 more than 5GB/s per physics core, almost as fast as Intel ISA-L
 
-10+4 encode run on AWS t2.micro Intel(R) Xeon(R) CPU E5-2676 v3 @ 2.40GHz, Memory 1GB, ubuntu-trusty-16.04-amd64:
-
-xxx is my code
-
-intel is Intel ISA-L
-
 faster than ISA-L when the data_size is small
 
-![isal](http://templex.xyz/images/reedsolomon/perfnew.jpg)
+but slower if the data size is big ( in the my EC2, 10+4 encode, the "big" will be 20MB)
+
+**My EC2**:
+
+AWS t2.micro Intel(R) Xeon(R) CPU E5-2676 v3 @ 2.40GHz, Memory 1GB, ubuntu-trusty-16.04-amd64
+
+## About Decode
+
+In practice, we have a fixed strategy of RS. So the args of Encoding is fixed.
+
+But, we can have many ways to complete decoding(it call reconst here). So the reconst part here is
+just for reference. It will be good for our system, but maybe it's not the efficient way in your system.
+You can make a new decoding through encoding, and it's not hard, if you need help, here is my email:
+
+temple3x@gmail.com
+
+## More Info
 
 More info in [my blogs](http://www.templex.xyz/blog/101/reedsolomon.html) (in Chinese)
-
-
 
  * Coding over in GF(2^8).
  * Primitive Polynomial: x^8 + x^4 + x^3 + x^2 + 1 (0x1d)
@@ -30,7 +32,7 @@ More info in [my blogs](http://www.templex.xyz/blog/101/reedsolomon.html) (in Ch
 It released by  [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon), with some optimizations/changes:
 
 1. Use Cauchy matrix as generator matrix. Vandermonde matrix need more operations for preserving the property that any square subset of rows is invertible
-2. There are a math tool(mathtools/gentables.go) for generator Primitive Polynomial and it's log table, exp table, multiply table, inverse table etc. We can get more info about how galois field work
+2. There are a math tool(mathtool/gentables.go) for generator Primitive Polynomial and it's log table, exp table, multiply table, inverse table etc. We can get more info about how galois field work
 3. Use a single core to encode
 4. New Go version have added some new instruction, and some are what we need here. The byte sequence in asm files are changed to instructions now (unfortunately, I added some new bytes codes)
 5. Delete inverse matrix cache part, it’s a statistical fact that only 2-3% shards need to be repaired. And calculating invert matrix is very fast, so I don't think it will improve performance very much
@@ -40,27 +42,40 @@ It released by  [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon
 9. I drop the "TEST in_data is empty or not" part in asm file
 10. No R8-R15 register in asm codes, because it need one more byte
 11. Only import Golang standard library
-12. ...
+12. More Cache-friendly
+13. ...
 
-# Installation
+Actually, mine is almost entirely different with Klauspost's. But his' do inspire me
+
+## Installation
 To get the package use the standard:
 ```bash
 go get github.com/templexxx/reedsolomon
 ```
 
-# Usage
+## Usage
 
-This section assumes you know the basics of Reed-Solomon encoding. A good start is this [Backblaze blog post](https://www.backblaze.com/blog/reed-solomon/).
+The most important part of these codes are :
 
-There are only three public function in the package: Encode, Reconst and NewMatrix
+1. Encode
+2. Reconst
+3. Matrix
+4. Check args
 
-NewMatrix: return a [][]byte for encode and reconst
+You need check args before sending data to the engine
 
-Encode : calculate parity of data shards;
+all data & parity are store in Matrix([][]byte)
 
-Reconst: calculate data or parity from present shards;
+**warning:**
 
-# Performance
+the shard size must be integral multiple of 256B (avx2) or 16B (ssse3), in practice, we always have a fixed shard size,
+and I'm too lazy to make it flexible
+
+sorry about that :D
+
+
+## Performance
+
 Performance depends mainly on:
 
 1. number of parity shards
@@ -69,18 +84,36 @@ Performance depends mainly on:
 4. unit size of calculation
 5. size of shards
 6. speed of memory(waste so much time on read/write mem, :D )
+7. the way of using
+
+And we must know the benchmark test is quite different with encoding in practice.
+
+Because in benchmark test loops, the CPU Cache will help a lot. We must reuse the
+memory space well to make the performance as good as the benchmark test.
 
 Example of performance on my MacBook 2014-mid(i5-4278U 2.6GHz 2 physical cores). The 128KB per shards.
-Single core work here(fast version):
+Single core work here(avx2):
 
-| Encode/Reconst | data+parity/data+parity(lost_data)   | Speed (MB/S) |
-|----------------|-------------------|--------------|
-| E              |      10+4       |5849.41  |
-| R              |      10+4(1)       | 19050.82 |
-| R              |      10+4(2)       | 9725.64  |
-| R              |      10+4(3)       | 6974.09  |
-| R              |      10+4(4)      | 5528.68 |
-# Links
+| Shard size | Speed (MB/S) |
+|----------------|--------------|
+| 1KB              |5670.41  |
+| 2KB             |   6341.92 |
+| 4KB              |    6660.46  |
+| 8KB              |       6259.54  |
+| 16KB              |     6301.48 |
+| 32KB              |     5922.17 |
+| 64KB              |       5875.41 |
+| 128KB              |       5688.15 |
+| 256KB              |      4973.67 |
+| 512KB              |       4406.47 |
+| 1MB              |      4570.09 |
+| 2MB              |      4669.23 |
+| 4MB              |      4548.71 |
+| 8MB              |      4552.08 |
+| 16MB              |      4479.27 |
+| 32MB              |      4613.49 |
+
+## Links & Thanks
 * [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon)
 * [intel ISA-L](https://github.com/01org/isa-l)
 * [GF SIMD] (http://www.ssrc.ucsc.edu/papers/plank-fast13.pdf)
