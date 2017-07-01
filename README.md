@@ -14,10 +14,7 @@ AWS t2.micro Intel(R) Xeon(R) CPU E5-2676 v3 @ 2.40GHz, Memory 1GB, ubuntu-trust
 
 ## About Decode
 
-In practice, we have a fixed strategy of RS. So the args of Encoding is fixed.
-
-But, we can have many ways to complete decoding(it call reconst here). So the reconst part here is
-just for reference. It will be good for our system, but maybe it's not the efficient way in your system.
+We can have many ways to write codes about decoding(it call reconst here). It will be good for our system, but maybe it's not the best way for your system.
 You can make a new decoding through encoding, and it's not hard, if you need help, here is my email:
 
 temple3x@gmail.com
@@ -78,12 +75,12 @@ sorry about that :D
 
 Performance depends mainly on:
 
-1. number of parity shards
-2. number of cores of CPU (if you want to use parallel version)
-3. CPU instruction extension(AVX2 or SSSE3)
-4. unit size of calculation
-5. size of shards
-6. speed of memory(waste so much time on read/write mem, :D )
+1. CPU instruction extension(AVX2 or SSSE3)
+2. number of data/parity shards
+3. unit size of calculation (see it in encode.go)
+4. size of shards
+5. speed of memory(waste so much time on read/write mem, :D )
+6. performance of CPU
 7. the way of using
 
 And we must know the benchmark test is quite different with encoding in practice.
