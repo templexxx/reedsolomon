@@ -14,20 +14,35 @@ func NewMatrix(rows, cols int) Matrix {
 	return m
 }
 
-// return identity matrix(upper) cauchy Matrix(lower)
-func genEncodeMatrix(rows, cols int) Matrix {
+// return identity Matrix(upper) cauchy Matrix(lower)
+func GenEncodeMatrix(d, p int) Matrix {
+	rows := d+p
+	cols := d
 	m := NewMatrix(rows, cols)
-	// identity matrix
+	// identity Matrix
 	for j := 0; j < cols; j++ {
 		m[j][j] = byte(1)
 	}
-	// cauchy matrix
+	// cauchy Matrix
+	c := genCauchyMatrix(d, p)
+	for i, v := range c {
+		copy(m[d+i], v)
+	}
+	return m
+}
+
+func genCauchyMatrix(d,p int) Matrix {
+	rows := d+p
+	cols := d
+	m := NewMatrix(p, cols)
+	start := 0
 	for i := cols; i < rows; i++ {
 		for j := 0; j < cols; j++ {
 			d := i ^ j
 			a := inverseTable[d]
-			m[i][j] = byte(a)
+			m[start][j] = byte(a)
 		}
+		start++
 	}
 	return m
 }
@@ -59,7 +74,7 @@ func (m Matrix) augIM(iM Matrix) (Matrix, error) {
 	return result, nil
 }
 
-var ErrSingular = errors.New("reedsolomon: matrix is singular")
+var ErrSingular = errors.New("reedsolomon: Matrix is singular")
 
 // (IN|I) -> (I|OUT)
 func (m Matrix) gaussJordan() error {
@@ -78,7 +93,7 @@ func (m Matrix) gaussJordan() error {
 				}
 			}
 		}
-		// After swap, if we find all elements in this column is 0, it means the matrix's det is 0
+		// After swap, if we find all elements in this column is 0, it means the Matrix's det is 0
 		if m[r][r] == 0 {
 			return ErrSingular
 		}
@@ -137,7 +152,7 @@ func (m Matrix) subMatrix(size int) Matrix {
 	return result
 }
 
-// SwapRows Exchanges two rows in the matrix.
+// SwapRows Exchanges two rows in the Matrix.
 func (m Matrix) swapRows(r1, r2 int) {
 	m[r2], m[r1] = m[r1], m[r2]
 }

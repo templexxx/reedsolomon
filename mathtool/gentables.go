@@ -66,34 +66,120 @@ func main() {
 	outputWriter.Flush()
 }
 
-func formatPolynomial(p polynomial) string {
-	var ps string
-	for i := deg; i > 1; i-- {
-		if p[i] == 1 {
-			ps = ps + "x^" + strconv.FormatInt(int64(i), 10) + "+"
+// generate primitive Polynomial
+func genPrimitivePolynomial() []polynomial {
+	// drop Polynomial x，so the constant term must be 1
+	// so there are 2^(deg-1) Polynomials
+	cnt := 1 << (deg - 1)
+	var polynomials []polynomial
+	var p polynomial
+	p[0] = 1
+	p[deg] = 1
+	// gen all Polynomials
+	for i := 0; i < cnt; i++ {
+		p = genPolynomial(p, 1)
+		polynomials = append(polynomials, p)
+	}
+	// drop Polynomial x+1, so the cnt of Polynomials is odd
+	var psRaw []polynomial
+	for _, p := range polynomials {
+		var n int
+		for _, v := range p {
+			if v == 1 {
+				n++
+			}
+		}
+		if n&1 != 0 {
+			psRaw = append(psRaw, p)
 		}
 	}
-	if p[1] == 1 {
-		ps = ps + "x+"
-	}
-	if p[0] == 1 {
-		ps = ps + "1"
-	} else {
-		strings.TrimSuffix(ps, "+")
+	// order of primitive element == 2^deg -1 ?
+	var ps []polynomial
+	for _, p := range psRaw {
+		lenTable := (1 << deg) - 1
+		table := genExpTable(p, lenTable)
+		var numOf1 int
+		for _, v := range table {
+			// cnt 1 in ExpTable
+			if int(v) == 1 {
+				numOf1++
+			}
+		}
+		if numOf1 == 1 {
+			ps = append(ps, p)
+		}
 	}
 	return ps
 }
 
-func genInverseTable(mulTable [256][256]byte) [256]byte {
-	var inVerseTable [256]byte
-	for i, t := range mulTable {
-		for j, v := range t {
-			if int(v) == 1 {
-				inVerseTable[i] = byte(j)
+func genPolynomial(p polynomial, i int) polynomial {
+	if p[i] == 0 {
+		p[i] = 1
+	} else {
+		p[i] = 0
+		i++
+		if i == deg {
+			return p
+		}
+		p = genPolynomial(p, i)
+	}
+	return p
+}
+
+func genExpTable(primitivePolynomial polynomial, exp int) []byte {
+	table := make([]byte, exp)
+	var rawPolynomial polynomial
+	rawPolynomial[1] = 1
+	table[0] = byte(1)
+	table[1] = byte(2)
+	for i := 2; i < exp; i++ {
+		rawPolynomial = expGrowPolynomial(rawPolynomial, primitivePolynomial)
+		table[i] = byte(getValueOfPolynomial(rawPolynomial))
+	}
+	return table
+}
+
+func expGrowPolynomial(raw, primitivePolynomial polynomial) polynomial {
+	var newP polynomial
+	for i, v := range raw[:deg] {
+		if v == 1 {
+			newP[i+1] = 1
+		}
+	}
+	if newP[deg] == 1 {
+		for i, v := range primitivePolynomial[:deg] {
+			if v == 1 {
+				if newP[i] == 1 {
+					newP[i] = 0
+				} else {
+					newP[i] = 1
+				}
 			}
 		}
 	}
-	return inVerseTable
+	newP[deg] = 0
+	return newP
+}
+
+func getValueOfPolynomial(p polynomial) uint8 {
+	var v uint8
+	for i, coefficient := range p[:deg] {
+		if coefficient != 0 {
+			add := 1 << uint8(i)
+			v += uint8(add)
+		}
+	}
+	return v
+}
+
+func genLogTable(expTable []byte) []byte {
+	table := make([]byte, (1 << deg))
+	//table[0] 无法由本原元的幂得到
+	table[0] = 0
+	for i, v := range expTable {
+		table[v] = byte(i)
+	}
+	return table
 }
 
 func genMulTable(expTable, logTable []byte) [256][256]byte {
@@ -134,124 +220,32 @@ func genMulTableHalf(mulTable [256][256]byte) (low [256][16]byte, high [256][16]
 	return
 }
 
-// generate primitive Polynomial
-func genPrimitivePolynomial() []polynomial {
-	// 去除多项式x，则常数项必须为1
-	// 因此总共有 2^(deg-1) 个多项式
-	len := 1 << (deg - 1)
-	var polynomials []polynomial
-	var p polynomial
-	p[0] = 1
-	p[deg] = 1
-	// 生成所有多项式
-	for i := 0; i < len; i++ {
-		p = binaryAddOfPolynomial(p, 1)
-		polynomials = append(polynomials, p)
-	}
-	// 去除多项式 x+1, 可得多项式的项总数为奇数
-	var psRaw []polynomial
-	for _, p := range polynomials {
-		var n int
-		for _, v := range p {
-			if v == 1 {
-				n++
-			}
-		}
-		if n&1 != 0 {
-			psRaw = append(psRaw, p)
-		}
-	}
-	// 计算本原元的阶是否为2^deg-1
-	var ps []polynomial
-	for _, p := range psRaw {
-		lenTable := (1 << deg) - 1
-		table := genExpTable(p, lenTable)
-		var numOf1 int
-		for _, v := range table {
-			// 累加指数表中为 1 的元素
+func genInverseTable(mulTable [256][256]byte) [256]byte {
+	var inVerseTable [256]byte
+	for i, t := range mulTable {
+		for j, v := range t {
 			if int(v) == 1 {
-				numOf1++
+				inVerseTable[i] = byte(j)
 			}
 		}
-		if numOf1 == 1 {
-			ps = append(ps, p)
+	}
+	return inVerseTable
+}
+
+func formatPolynomial(p polynomial) string {
+	var ps string
+	for i := deg; i > 1; i-- {
+		if p[i] == 1 {
+			ps = ps + "x^" + strconv.FormatInt(int64(i), 10) + "+"
 		}
+	}
+	if p[1] == 1 {
+		ps = ps + "x+"
+	}
+	if p[0] == 1 {
+		ps = ps + "1"
+	} else {
+		strings.TrimSuffix(ps, "+")
 	}
 	return ps
-}
-
-// 将多项式系数提取出来做二进制加法
-func binaryAddOfPolynomial(p polynomial, i int) polynomial {
-	if p[i] == 0 {
-		p[i] = 1
-	} else {
-		p[i] = 0
-		i++
-		if i == deg {
-			return p
-		}
-		p = binaryAddOfPolynomial(p, i)
-	}
-	return p
-}
-
-// 生成对数表
-func genLogTable(expTable []byte) []byte {
-	table := make([]byte, (1 << deg))
-	//table[0] 无法由本原元的幂得到
-	table[0] = 0
-	for i, v := range expTable {
-		table[v] = byte(i)
-	}
-	return table
-}
-
-// 生成指数表
-// 例如，2^8 expTable的length为255，即指数表中最高指数为255-1
-func genExpTable(primitivePolynomial polynomial, exp int) []byte {
-	table := make([]byte, exp)
-	var rawPolynomial polynomial
-	rawPolynomial[1] = 1
-	table[0] = byte(1)
-	table[1] = byte(2)
-	for i := 2; i < exp; i++ {
-		rawPolynomial = expGrowPolynomial(rawPolynomial, primitivePolynomial)
-		table[i] = byte(getValueOfPolynomial(rawPolynomial))
-	}
-	return table
-}
-
-// 本原元升幂得到的多项式
-func expGrowPolynomial(raw, primitivePolynomial polynomial) polynomial {
-	var newP polynomial
-	for i, v := range raw[:deg] {
-		if v == 1 {
-			newP[i+1] = 1
-		}
-	}
-	if newP[deg] == 1 {
-		for i, v := range primitivePolynomial[:deg] {
-			if v == 1 {
-				if newP[i] == 1 {
-					newP[i] = 0
-				} else {
-					newP[i] = 1
-				}
-			}
-		}
-	}
-	newP[deg] = 0
-	return newP
-}
-
-// 获取多项式的值
-func getValueOfPolynomial(p polynomial) uint8 {
-	var v uint8
-	for i, coefficient := range p[:deg] {
-		if coefficient != 0 {
-			add := 1 << uint8(i)
-			v += uint8(add)
-		}
-	}
-	return v
 }

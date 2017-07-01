@@ -1,91 +1,160 @@
 package reedsolomon
 
-import "sort"
-
-// dp : Data+Parity Shards, all Shards size must be equal
-// lost : row number in dp
-func (r *RS) Reconst(dp Matrix, lost []int, repairParity bool) error {
-	if len(dp) != r.Shards {
-		return ErrTooFewShards
-	}
-	size, err := checkShardSize(dp)
-	if err != nil {
-		return err
-	}
-	if len(lost) == 0 {
-		return nil
-	}
-	if len(lost) > r.Parity {
-		return ErrTooFewShards
-	}
-	dataLost, parityLost := splitLost(lost, r.Data)
-	sort.Ints(dataLost)
-	sort.Ints(parityLost)
+// Reconst steps:
+// 1. read survived data ( In practice, recommend read more than num of data shards for avoiding read err)
+// 2. reconst data (if lost)
+// 3. reconst parity (if lost)
+func (r rsAVX2) Reconst(dp Matrix, have, lost []int) (err error) {
+	size := len(dp[0])
+	dataLost, parityLost := splitLost(lost, r.in)
 	if len(dataLost) > 0 {
-		err = reconstData(r.M, dp, dataLost, parityLost, r.Data, size, r.INS)
+		err := r.reconstData(dp, size, have, dataLost)
 		if err != nil {
 			return err
 		}
 	}
-	if len(parityLost) > 0 && repairParity {
-		reconstParity(r.M, dp, parityLost, r.Data, size, r.INS)
+	if len(parityLost) > 0 {
+		r.reconstParity(dp, size, parityLost)
 	}
 	return nil
 }
 
-func reconstData(encodeMatrix, dp Matrix, dataLost, parityLost []int, numData, size, ins int) error {
-	decodeMatrix := NewMatrix(numData, numData)
-	survivedMap := make(map[int]int)
-	numShards := len(encodeMatrix)
-	// fill with survived Data
-	for i := 0; i < numData; i++ {
-		if survived(i, dataLost) {
-			decodeMatrix[i] = encodeMatrix[i]
-			survivedMap[i] = i
+func (r rsSSSE3) Reconst(dp Matrix, have, lost []int) (err error) {
+	size := len(dp[0])
+	dataLost, parityLost := splitLost(lost, r.in)
+	if len(dataLost) > 0 {
+		err := r.reconstData(dp, size, have, dataLost)
+		if err != nil {
+			return err
 		}
 	}
-	// "borrow" from survived Parity
-	k := numData
-	for _, dl := range dataLost {
-		for j := k; j < numShards; j++ {
-			k++
-			if survived(j, parityLost) {
-				decodeMatrix[dl] = encodeMatrix[j]
-				survivedMap[dl] = j
-				break
-			}
+	if len(parityLost) > 0 {
+		r.reconstParity(dp, size, parityLost)
+	}
+	return nil
+}
+
+func (r rsBase) Reconst(dp Matrix, have, lost []int) (err error) {
+	size := len(dp[0])
+	dataLost, parityLost := splitLost(lost, r.in)
+	if len(dataLost) > 0 {
+		err := r.reconstData(dp, size, have, dataLost)
+		if err != nil {
+			return err
 		}
 	}
-	var err error
-	decodeMatrix, err = decodeMatrix.invert()
+	if len(parityLost) > 0 {
+		r.reconstParity(dp, size, parityLost)
+	}
+	return nil
+}
+
+func (r rsAVX2) reconstData(dp Matrix, size int, have, dataLost []int) error {
+	dpTmp, gen, err := genReconstMatrix(dp, r.in, r.out, size, have, dataLost)
 	if err != nil {
 		return err
 	}
-	// fill generator matrix with lost rows of decode Matrix
-	numDL := len(dataLost)
-	gen := NewMatrix(numDL, numData)
-	outputMap := make(map[int]int)
+	t := genTables(gen)
+	e := rsAVX2{tables: t, in: r.in, out: len(dataLost)}
+	e.Encode(dpTmp[:r.in], dpTmp[r.in:])
 	for i, l := range dataLost {
-		gen[i] = decodeMatrix[l]
-		outputMap[i] = l
+		dp[l] = dpTmp[r.in+i]
 	}
-	encodeSSSE3(gen, dp, numData, numDL, size, survivedMap, outputMap)
 	return nil
 }
 
-func reconstParity(encodeMatrix, dp Matrix, parityLost []int, numData, size, ins int) {
-	gen := NewMatrix(len(parityLost), numData)
-	outputMap := make(map[int]int)
-	for i := range gen {
-		l := parityLost[i]
-		gen[i] = encodeMatrix[l]
-		outputMap[i] = l
+func (r rsAVX2) reconstParity(dp Matrix, size int, parityLost []int) {
+	genTmp := genCauchyMatrix(r.in, r.out)
+	numPL := len(parityLost)
+	gen := NewMatrix(numPL, r.in)
+	for i, l := range parityLost {
+		gen[i] = genTmp[l-r.in]
 	}
-	inMap := make(map[int]int)
-	for i := 0; i < numData; i++ {
-		inMap[i] = i
+	out := NewMatrix(numPL, size)
+	t := genTables(gen)
+	e := rsAVX2{tables: t, in: r.in, out: numPL}
+	e.Encode(dp[:r.in], out)
+	for i, l := range parityLost {
+		dp[l] = out[i]
 	}
-	encodeSSSE3(gen, dp, numData, len(parityLost), size, inMap, outputMap)
+}
+
+func (r rsSSSE3) reconstData(dp Matrix, size int, have, dataLost []int) error {
+	dpTmp, gen, err := genReconstMatrix(dp, r.in, r.out, size, have, dataLost)
+	if err != nil {
+		return err
+	}
+	t := genTables(gen)
+	e := rsSSSE3{tables: t, in: r.in, out: len(dataLost)}
+	e.Encode(dpTmp[:r.in], dpTmp[r.in:])
+	for i, l := range dataLost {
+		dp[l] = dpTmp[r.in+i]
+	}
+	return nil
+}
+
+func (r rsSSSE3) reconstParity(dp Matrix, size int, parityLost []int) {
+	genTmp := genCauchyMatrix(r.in, r.out)
+	numPL := len(parityLost)
+	gen := NewMatrix(numPL, r.in)
+	for i, l := range parityLost {
+		gen[i] = genTmp[l-r.in]
+	}
+	out := NewMatrix(numPL, size)
+	t := genTables(gen)
+	e := rsSSSE3{tables: t, in: r.in, out: numPL}
+	e.Encode(dp[:r.in], out)
+	for i, l := range parityLost {
+		dp[l] = out[i]
+	}
+}
+
+func (r rsBase) reconstData(dp Matrix, size int, have, dataLost []int) error {
+	dpTmp, gen, err := genReconstMatrix(dp, r.in, r.out, size, have, dataLost)
+	if err != nil {
+		return err
+	}
+	e := rsBase{gen: gen, in: r.in, out: len(dataLost)}
+	e.Encode(dpTmp[:r.in], dpTmp[r.in:])
+	for i, l := range dataLost {
+		dp[l] = dpTmp[r.in+i]
+	}
+	return nil
+}
+
+func (r rsBase) reconstParity(dp Matrix, size int, parityLost []int) {
+	genTmp := genCauchyMatrix(r.in, r.out)
+	numPL := len(parityLost)
+	gen := NewMatrix(numPL, r.in)
+	for i, l := range parityLost {
+		gen[i] = genTmp[l-r.in]
+	}
+	out := NewMatrix(numPL, size)
+	e := rsBase{gen: gen, in: r.in, out: numPL}
+	e.Encode(dp[:r.in], out)
+	for i, l := range parityLost {
+		dp[l] = out[i]
+	}
+}
+
+func genReconstMatrix(dp Matrix, data, parity, size int, have, dataLost []int) (dpTmp, gen Matrix, err error) {
+	e := GenEncodeMatrix(data, parity)
+	decodeM := NewMatrix(data, data)
+	numDL := len(dataLost)
+	dpTmp = NewMatrix(data+numDL, size)
+	for i, h := range have {
+		copy(decodeM[i], e[h])
+		dpTmp[i] = dp[h]
+	}
+	decodeM, err = decodeM.invert()
+	if err != nil {
+		return
+	}
+	gen = NewMatrix(numDL, data)
+	for i, l := range dataLost {
+		gen[i] = decodeM[l]
+	}
+	return
 }
 
 func splitLost(lost []int, d int) ([]int, []int) {
@@ -99,13 +168,4 @@ func splitLost(lost []int, d int) ([]int, []int) {
 		}
 	}
 	return dataLost, parityLost
-}
-
-func survived(i int, lost []int) bool {
-	for _, l := range lost {
-		if i == l {
-			return false
-		}
-	}
-	return true
 }

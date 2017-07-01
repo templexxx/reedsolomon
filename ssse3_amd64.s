@@ -1,21 +1,21 @@
 #include "textflag.h"
 
-// func gfMulSSSE3(low, high, in, out []byte)
-TEXT ·gfMulSSSE3(SB), NOSPLIT, $0
-	MOVQ   low+0(FP), AX
-	MOVQ   high+24(FP), BX
+TEXT ·mulSSSE3(SB), NOSPLIT, $0
+	MOVQ   lowTable+0(FP), AX
+	MOVQ   AX, BX
+	ADDQ   $16, BX
 	MOVOU  (AX), X0
 	MOVOU  (BX), X1
-	MOVQ   in+48(FP), AX
-	MOVQ   out+72(FP), BX
+	MOVQ   in+24(FP), AX
+	MOVQ   out+48(FP), BX
 	MOVQ   $15, CX
 	MOVQ   CX, X3
 	PXOR   X2, X2
 	PSHUFB X2, X3
-	MOVQ   in_len+56(FP), CX
+	MOVQ   in_len+32(FP), CX
 	SHRQ   $4, CX
 
-worker:
+loop:
 	MOVOU  (AX), X4
 	MOVOU  X4, X5
 	PSRLQ  $4, X5
@@ -30,25 +30,25 @@ worker:
 	ADDQ   $16, AX
 	ADDQ   $16, BX
 	SUBQ   $1, CX
-	JNZ    worker
+	JNZ    loop
 	RET
 
-// func gfMulXorSSSE3(low, high, in, out []byte)
-TEXT ·gfMulXorSSSE3(SB), NOSPLIT, $0
-	MOVQ   low+0(FP), AX
-	MOVQ   high+24(FP), BX
+TEXT ·mulXORSSSE3(SB), NOSPLIT, $0
+	MOVQ   lowTable+0(FP), AX
+	MOVQ   AX, BX
+	ADDQ   $16, BX
 	MOVOU  (AX), X0
 	MOVOU  (BX), X1
-	MOVQ   in+48(FP), AX
-	MOVQ   out+72(FP), BX
+	MOVQ   in+24(FP), AX
+	MOVQ   out+48(FP), BX
 	MOVQ   $15, CX
 	MOVQ   CX, X3
 	PXOR   X2, X2
 	PSHUFB X2, X3
-	MOVQ   in_len+56(FP), CX
+	MOVQ   in_len+32(FP), CX
 	SHRQ   $4, CX
 
-worker:
+loop:
 	MOVOU  (AX), X4
 	MOVOU  (BX), X8
 	MOVOU  X4, X5
@@ -65,10 +65,9 @@ worker:
 	ADDQ   $16, AX
 	ADDQ   $16, BX
 	SUBQ   $1, CX
-	JNZ    worker
+	JNZ    loop
 	RET
 
-// func hasSSSE3() bool
 TEXT ·hasSSSE3(SB), NOSPLIT, $0
 	XORQ AX, AX
 	INCL AX

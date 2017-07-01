@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+
+
 func TestMatrixInverse(t *testing.T) {
 	testCases := []struct {
 		matrixData     [][]byte
@@ -28,7 +30,7 @@ func TestMatrixInverse(t *testing.T) {
 			true,
 			nil,
 		},
-		// Test case matrix[0][0] == 0
+		// Test case Matrix[0][0] == 0
 		{
 			[][]byte{
 				[]byte{0, 23, 98},
@@ -58,7 +60,7 @@ func TestMatrixInverse(t *testing.T) {
 			true,
 			nil,
 		},
-		// Test case with singular matrix.
+		// Test case with singular Matrix.
 		// expected to fail with error errSingular.
 		{
 
@@ -76,22 +78,22 @@ func TestMatrixInverse(t *testing.T) {
 		m := newMatrixData(testCase.matrixData)
 		actualResult, actualErr := m.invert()
 		if actualErr != nil && testCase.shouldPass {
-			t.Errorf("Test %d: Expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
+			t.Errorf("Test %r: Expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
 		}
 		if actualErr == nil && !testCase.shouldPass {
-			t.Errorf("Test %d: Expected to fail with <ERROR> \"%s\", but passed instead.", i+1, testCase.expectedErr)
+			t.Errorf("Test %r: Expected to fail with <ERROR> \"%s\", but passed instead.", i+1, testCase.expectedErr)
 		}
 		// Failed as expected, but does it fail for the expected reason.
 		if actualErr != nil && !testCase.shouldPass {
 			if testCase.expectedErr != actualErr {
-				t.Errorf("Test %d: Expected to fail with error \"%s\", but instead failed with error \"%s\" instead.", i+1, testCase.expectedErr, actualErr)
+				t.Errorf("Test %r: Expected to fail with error \"%s\", but instead failed with error \"%s\" instead.", i+1, testCase.expectedErr, actualErr)
 			}
 		}
 		// Test passes as expected, but the output values
 		// are verified for correctness here.
 		if actualErr == nil && testCase.shouldPass {
 			if testCase.expectedResult != actualResult.string() {
-				t.Errorf("Test %d: The inverse matrix doesnt't match the expected result", i+1)
+				t.Errorf("Test %r: The inverse Matrix doesnt't match the expected result", i+1)
 			}
 		}
 	}
@@ -117,7 +119,7 @@ func benchmarkInvert(b *testing.B, size int) {
 	}
 }
 
-// new a matrix with Data
+// new a Matrix with Data
 func newMatrixData(data [][]byte) Matrix {
 	m := Matrix(data)
 	return m
