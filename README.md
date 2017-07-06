@@ -88,7 +88,7 @@ And we must know the benchmark test is quite different with encoding in practice
 Because in benchmark test loops, the CPU Cache will help a lot. We must reuse the
 memory space well to make the performance as good as the benchmark test.
 
-Example of performance on my MacBook 2014-mid(i5-4278U 2.6GHz 2 physical cores). The 128KB per shards.
+Example of performance on my MacBook 2014-mid(i5-4278U 2.6GHz 2 physical cores). 10+4.
 Single core work here(avx2):
 
 | Shard size | Speed (MB/S) |
