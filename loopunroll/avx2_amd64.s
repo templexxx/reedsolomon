@@ -1,0 +1,272 @@
+// Reference: www.ssrc.ucsc.edu/Papers/plank-fast13.pdf
+
+#include "textflag.h"
+
+TEXT ·mulAVX2(SB), NOSPLIT, $0
+	MOVQ         table+0(FP), AX
+	MOVQ         AX, BX
+	ADDQ         $16, BX
+	VMOVDQU      (AX), X0
+	VMOVDQU      (BX), X1
+	VINSERTI128  $1, X0, Y0, Y0
+	VINSERTI128  $1, X1, Y1, Y1
+	MOVQ         in+24(FP), AX
+	MOVQ         out+48(FP), BX
+	MOVQ         AX, SI
+	MOVQ         BX, DI
+	ADDQ         $32, SI
+	ADDQ         $32, DI
+	WORD         $0x0fb2
+	LONG         $0x2069e3c4; WORD $0x00d2
+	VPBROADCASTB X2, Y2
+	MOVQ         in_len+32(FP), CX
+	SHRQ         $8, CX
+
+loop:
+	// 1
+	VMOVDQU (AX), Y4
+	VPSRLQ  $4, Y4, Y5
+	VPAND   Y2, Y5, Y5
+	VPAND   Y2, Y4, Y4
+	VPSHUFB Y5, Y1, Y6
+	VPSHUFB Y4, Y0, Y7
+	VPXOR   Y6, Y7, Y3
+	VMOVDQU Y3, (BX)
+	ADDQ    $64, AX
+	ADDQ    $64, BX
+
+	// 2
+	VMOVDQU (SI), Y8
+	VPSRLQ  $4, Y8, Y9
+	VPAND   Y2, Y9, Y9
+	VPAND   Y2, Y8, Y8
+	VPSHUFB Y9, Y1, Y10
+	VPSHUFB Y8, Y0, Y11
+	VPXOR   Y10, Y11, Y12
+	VMOVDQU Y12, (DI)
+	ADDQ    $64, SI
+	ADDQ    $64, DI
+
+	// 3
+	VMOVDQU (AX), Y4
+	VPSRLQ  $4, Y4, Y5
+	VPAND   Y2, Y5, Y5
+	VPAND   Y2, Y4, Y4
+	VPSHUFB Y5, Y1, Y6
+	VPSHUFB Y4, Y0, Y7
+	VPXOR   Y6, Y7, Y3
+	VMOVDQU Y3, (BX)
+	ADDQ    $64, AX
+	ADDQ    $64, BX
+
+	// 4
+	VMOVDQU (SI), Y8
+	VPSRLQ  $4, Y8, Y9
+	VPAND   Y2, Y9, Y9
+	VPAND   Y2, Y8, Y8
+	VPSHUFB Y9, Y1, Y10
+	VPSHUFB Y8, Y0, Y11
+	VPXOR   Y10, Y11, Y12
+	VMOVDQU Y12, (DI)
+	ADDQ    $64, SI
+	ADDQ    $64, DI
+
+	// 5
+	VMOVDQU (AX), Y4
+	VPSRLQ  $4, Y4, Y5
+	VPAND   Y2, Y5, Y5
+	VPAND   Y2, Y4, Y4
+	VPSHUFB Y5, Y1, Y6
+	VPSHUFB Y4, Y0, Y7
+	VPXOR   Y6, Y7, Y3
+	VMOVDQU Y3, (BX)
+	ADDQ    $64, AX
+	ADDQ    $64, BX
+
+	// 6
+	VMOVDQU (SI), Y8
+	VPSRLQ  $4, Y8, Y9
+	VPAND   Y2, Y9, Y9
+	VPAND   Y2, Y8, Y8
+	VPSHUFB Y9, Y1, Y10
+	VPSHUFB Y8, Y0, Y11
+	VPXOR   Y10, Y11, Y12
+	VMOVDQU Y12, (DI)
+	ADDQ    $64, SI
+	ADDQ    $64, DI
+
+	// 7
+	VMOVDQU (AX), Y4
+	VPSRLQ  $4, Y4, Y5
+	VPAND   Y2, Y5, Y5
+	VPAND   Y2, Y4, Y4
+	VPSHUFB Y5, Y1, Y6
+	VPSHUFB Y4, Y0, Y7
+	VPXOR   Y6, Y7, Y3
+	VMOVDQU Y3, (BX)
+	ADDQ    $64, AX
+	ADDQ    $64, BX
+
+	// 8
+	VMOVDQU (SI), Y8
+	VPSRLQ  $4, Y8, Y9
+	VPAND   Y2, Y9, Y9
+	VPAND   Y2, Y8, Y8
+	VPSHUFB Y9, Y1, Y10
+	VPSHUFB Y8, Y0, Y11
+	VPXOR   Y10, Y11, Y12
+	VMOVDQU Y12, (DI)
+	ADDQ    $64, SI
+	ADDQ    $64, DI
+
+	SUBQ $1, CX
+	JNZ  loop
+	RET
+
+TEXT ·mulXORAVX2(SB), NOSPLIT, $0
+	MOVQ         lowTable+0(FP), AX
+	MOVQ         AX, BX
+	ADDQ         $16, BX
+	VMOVDQU      (AX), X0
+	VMOVDQU      (BX), X1
+	VINSERTI128  $1, X0, Y0, Y0
+	VINSERTI128  $1, X1, Y1, Y1
+	MOVQ         in+24(FP), AX
+	MOVQ         out+48(FP), BX
+	MOVQ         AX, SI
+	MOVQ         BX, DI
+	ADDQ         $32, SI
+	ADDQ         $32, DI
+	WORD         $0x0fb2
+	LONG         $0x2069e3c4; WORD $0x00d2
+	VPBROADCASTB X2, Y2
+	MOVQ         in_len+32(FP), CX
+	SHRQ         $8, CX
+
+loop:
+	// 1
+	VMOVDQU (AX), Y4
+	VMOVDQU (BX), Y3
+	VPSRLQ  $4, Y4, Y5
+	VPAND   Y2, Y5, Y5
+	VPAND   Y2, Y4, Y4
+	VPSHUFB Y5, Y1, Y6
+	VPSHUFB Y4, Y0, Y7
+	VPXOR   Y6, Y7, Y6
+	VPXOR   Y6, Y3, Y3
+	VMOVDQU Y3, (BX)
+	ADDQ    $64, AX
+	ADDQ    $64, BX
+
+	// 2
+	VMOVDQU (SI), Y8
+	VMOVDQU (DI), Y9
+	VPSRLQ  $4, Y8, Y10
+	VPAND   Y2, Y10, Y10
+	VPAND   Y2, Y8, Y8
+	VPSHUFB Y10, Y1, Y11
+	VPSHUFB Y8, Y0, Y12
+	VPXOR   Y11, Y12, Y13
+	VPXOR   Y9, Y13, Y13
+	VMOVDQU Y13, (DI)
+	ADDQ    $64, SI
+	ADDQ    $64, DI
+
+	// 3
+	VMOVDQU (AX), Y4
+	VMOVDQU (BX), Y3
+	VPSRLQ  $4, Y4, Y5
+	VPAND   Y2, Y5, Y5
+	VPAND   Y2, Y4, Y4
+	VPSHUFB Y5, Y1, Y6
+	VPSHUFB Y4, Y0, Y7
+	VPXOR   Y6, Y7, Y6
+	VPXOR   Y6, Y3, Y3
+	VMOVDQU Y3, (BX)
+	ADDQ    $64, AX
+	ADDQ    $64, BX
+
+	// 4
+	VMOVDQU (SI), Y8
+	VMOVDQU (DI), Y9
+	VPSRLQ  $4, Y8, Y10
+	VPAND   Y2, Y10, Y10
+	VPAND   Y2, Y8, Y8
+	VPSHUFB Y10, Y1, Y11
+	VPSHUFB Y8, Y0, Y12
+	VPXOR   Y11, Y12, Y13
+	VPXOR   Y9, Y13, Y13
+	VMOVDQU Y13, (DI)
+	ADDQ    $64, SI
+	ADDQ    $64, DI
+
+	// 5
+	VMOVDQU (AX), Y4
+	VMOVDQU (BX), Y3
+	VPSRLQ  $4, Y4, Y5
+	VPAND   Y2, Y5, Y5
+	VPAND   Y2, Y4, Y4
+	VPSHUFB Y5, Y1, Y6
+	VPSHUFB Y4, Y0, Y7
+	VPXOR   Y6, Y7, Y6
+	VPXOR   Y6, Y3, Y3
+	VMOVDQU Y3, (BX)
+	ADDQ    $64, AX
+	ADDQ    $64, BX
+
+	// 6
+	VMOVDQU (SI), Y8
+	VMOVDQU (DI), Y9
+	VPSRLQ  $4, Y8, Y10
+	VPAND   Y2, Y10, Y10
+	VPAND   Y2, Y8, Y8
+	VPSHUFB Y10, Y1, Y11
+	VPSHUFB Y8, Y0, Y12
+	VPXOR   Y11, Y12, Y13
+	VPXOR   Y9, Y13, Y13
+	VMOVDQU Y13, (DI)
+	ADDQ    $64, SI
+	ADDQ    $64, DI
+
+	// 7
+	VMOVDQU (AX), Y4
+	VMOVDQU (BX), Y3
+	VPSRLQ  $4, Y4, Y5
+	VPAND   Y2, Y5, Y5
+	VPAND   Y2, Y4, Y4
+	VPSHUFB Y5, Y1, Y6
+	VPSHUFB Y4, Y0, Y7
+	VPXOR   Y6, Y7, Y6
+	VPXOR   Y6, Y3, Y3
+	VMOVDQU Y3, (BX)
+	ADDQ    $64, AX
+	ADDQ    $64, BX
+
+	// 8
+	VMOVDQU (SI), Y8
+	VMOVDQU (DI), Y9
+	VPSRLQ  $4, Y8, Y10
+	VPAND   Y2, Y10, Y10
+	VPAND   Y2, Y8, Y8
+	VPSHUFB Y10, Y1, Y11
+	VPSHUFB Y8, Y0, Y12
+	VPXOR   Y11, Y12, Y13
+	VPXOR   Y9, Y13, Y13
+	VMOVDQU Y13, (DI)
+	ADDQ    $64, SI
+	ADDQ    $64, DI
+
+	SUBQ $1, CX
+	JNZ  loop
+	RET
+
+TEXT ·hasAVX2(SB), NOSPLIT, $0
+	XORQ AX, AX
+	XORQ CX, CX
+	ADDL $7, AX
+	CPUID              // when CPUID excutes with AX set to 07H, feature info is ret in BX
+	SHRQ $5, BX        // AVX -> BX[5] = 1
+	ANDQ $1, BX
+	MOVB BX, ret+0(FP)
+	RET
+

@@ -1,29 +1,27 @@
 package reedsolomon
 
-import (
-	"errors"
-)
+import "errors"
 
-type Matrix [][]byte // byte[row][col]
+type matrix [][]byte // byte[row][col]
 
-func NewMatrix(rows, cols int) Matrix {
-	m := Matrix(make([][]byte, rows))
+func NewMatrix(rows, cols int) matrix {
+	m := matrix(make([][]byte, rows))
 	for i := range m {
 		m[i] = make([]byte, cols)
 	}
 	return m
 }
 
-// return identity Matrix(upper) cauchy Matrix(lower)
-func GenEncodeMatrix(d, p int) Matrix {
-	rows := d+p
+// return identity matrix(upper) cauchy matrix(lower)
+func GenEncodeMatrix(d, p int) matrix {
+	rows := d + p
 	cols := d
 	m := NewMatrix(rows, cols)
-	// identity Matrix
+	// identity matrix
 	for j := 0; j < cols; j++ {
 		m[j][j] = byte(1)
 	}
-	// cauchy Matrix
+	// cauchy matrix
 	c := genCauchyMatrix(d, p)
 	for i, v := range c {
 		copy(m[d+i], v)
@@ -31,8 +29,8 @@ func GenEncodeMatrix(d, p int) Matrix {
 	return m
 }
 
-func genCauchyMatrix(d,p int) Matrix {
-	rows := d+p
+func genCauchyMatrix(d, p int) matrix {
+	rows := d + p
 	cols := d
 	m := NewMatrix(p, cols)
 	start := 0
@@ -47,7 +45,27 @@ func genCauchyMatrix(d,p int) Matrix {
 	return m
 }
 
-func (m Matrix) invert() (Matrix, error) {
+// m * m1
+func (m matrix) mul(m1 matrix) (matrix, error) {
+	if len(m[0]) != len(m1) {
+		return nil, ErrMatrixMul
+	}
+	ret := NewMatrix(len(m), len(m1[0]))
+	for r, row := range ret {
+		for c := range row {
+			var value byte
+			for i := range m[0] {
+				// TODO RSBASE Encode 跟这个一样
+				value ^= gfMul(m[r][i], m1[i][c])
+			}
+			ret[r][c] = value
+		}
+	}
+	return ret, nil
+}
+var ErrMatrixMul = errors.New("reedsolomon matrix multiply: num of left cols should be same as num of right rows")
+
+func (m matrix) invert() (matrix, error) {
 	size := len(m)
 	iM := identityMatrix(size)
 	mIM, _ := m.augIM(iM)
@@ -60,7 +78,7 @@ func (m Matrix) invert() (Matrix, error) {
 }
 
 // IN -> (IN|I)
-func (m Matrix) augIM(iM Matrix) (Matrix, error) {
+func (m matrix) augIM(iM matrix) (matrix, error) {
 	result := NewMatrix(len(m), len(m[0])+len(iM[0]))
 	for r, row := range m {
 		for c := range row {
@@ -74,10 +92,10 @@ func (m Matrix) augIM(iM Matrix) (Matrix, error) {
 	return result, nil
 }
 
-var ErrSingular = errors.New("reedsolomon: Matrix is singular")
+var ErrSingular = errors.New("reedsolomon: matrix is singular")
 
 // (IN|I) -> (I|OUT)
-func (m Matrix) gaussJordan() error {
+func (m matrix) gaussJordan() error {
 	rows := len(m)
 	columns := len(m[0])
 	// Clear out the part below the main diagonal and scale the main
@@ -93,7 +111,7 @@ func (m Matrix) gaussJordan() error {
 				}
 			}
 		}
-		// After swap, if we find all elements in this column is 0, it means the Matrix's det is 0
+		// After swap, if we find all elements in this column is 0, it means the matrix's det is 0
 		if m[r][r] == 0 {
 			return ErrSingular
 		}
@@ -133,7 +151,7 @@ func (m Matrix) gaussJordan() error {
 	return nil
 }
 
-func identityMatrix(n int) Matrix {
+func identityMatrix(n int) matrix {
 	m := NewMatrix(n, n)
 	for i := 0; i < n; i++ {
 		m[i][i] = byte(1)
@@ -142,7 +160,7 @@ func identityMatrix(n int) Matrix {
 }
 
 // (I|OUT) -> OUT
-func (m Matrix) subMatrix(size int) Matrix {
+func (m matrix) subMatrix(size int) matrix {
 	result := NewMatrix(size, size)
 	for r := 0; r < size; r++ {
 		for c := size; c < size*2; c++ {
@@ -152,8 +170,8 @@ func (m Matrix) subMatrix(size int) Matrix {
 	return result
 }
 
-// SwapRows Exchanges two rows in the Matrix.
-func (m Matrix) swapRows(r1, r2 int) {
+// SwapRows Exchanges two rows in the matrix.
+func (m matrix) swapRows(r1, r2 int) {
 	m[r2], m[r1] = m[r1], m[r2]
 }
 

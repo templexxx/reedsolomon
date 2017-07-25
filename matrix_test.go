@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-
-
 func TestMatrixInverse(t *testing.T) {
 	testCases := []struct {
 		matrixData     [][]byte
@@ -16,7 +14,7 @@ func TestMatrixInverse(t *testing.T) {
 		shouldPass     bool
 		expectedErr    error
 	}{
-		// Test case validating inverse of the input Matrix.
+		// Test case validating inverse of the input matrix.
 		{
 			// input
 			[][]byte{
@@ -30,7 +28,7 @@ func TestMatrixInverse(t *testing.T) {
 			true,
 			nil,
 		},
-		// Test case Matrix[0][0] == 0
+		// Test case matrix[0][0] == 0
 		{
 			[][]byte{
 				[]byte{0, 23, 98},
@@ -41,7 +39,7 @@ func TestMatrixInverse(t *testing.T) {
 			true,
 			nil,
 		},
-		// Test case validating inverse of the input Matrix.
+		// Test case validating inverse of the input matrix.
 		{
 			// input
 			[][]byte{
@@ -60,7 +58,7 @@ func TestMatrixInverse(t *testing.T) {
 			true,
 			nil,
 		},
-		// Test case with singular Matrix.
+		// Test case with singular matrix.
 		// expected to fail with error errSingular.
 		{
 
@@ -93,17 +91,13 @@ func TestMatrixInverse(t *testing.T) {
 		// are verified for correctness here.
 		if actualErr == nil && testCase.shouldPass {
 			if testCase.expectedResult != actualResult.string() {
-				t.Errorf("Test %r: The inverse Matrix doesnt't match the expected result", i+1)
+				t.Errorf("Test %r: The inverse matrix doesnt't match the expected result", i+1)
 			}
 		}
 	}
 }
 
 func BenchmarkInvert10x10(b *testing.B) {
-	benchmarkInvert(b, 10)
-}
-
-func BenchmarkInvert28x28(b *testing.B) {
 	benchmarkInvert(b, 10)
 }
 
@@ -119,13 +113,13 @@ func benchmarkInvert(b *testing.B, size int) {
 	}
 }
 
-// new a Matrix with Data
-func newMatrixData(data [][]byte) Matrix {
-	m := Matrix(data)
+// new a matrix with Data
+func newMatrixData(data [][]byte) matrix {
+	m := matrix(data)
 	return m
 }
 
-func (m Matrix) string() string {
+func (m matrix) string() string {
 	rowOut := make([]string, 0, len(m))
 	for _, row := range m {
 		colOut := make([]string, 0, len(row))

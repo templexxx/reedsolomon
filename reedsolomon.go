@@ -1,176 +1,77 @@
+/*
+	Reed-Solomon Codes over GF(2^8)
+	Primitive Polynomial:  x^8+x^4+x^3+x^2+1
+*/
+
 package reedsolomon
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 type EncodeReconster interface {
-	Encode(in, out Matrix) error
-	Reconst(dp Matrix, have, lost []int) error
+	Encode(shards matrix) error
+	Reconstruct(shards matrix) error
+	ReconstructData(shards matrix) error
 }
 
-type rsAVX2 rsSIMD
-type rsSSSE3 rsSIMD
-
-type rsBase struct {
-	gen Matrix
-	in  int
-	out int
-}
-
-type rsSIMD struct {
-	tables []byte
-	in     int
-	out    int
-}
-
-const (
-	Base = 1 << iota
-	AVX2
-	SSSE3
+// the cap of inverse Matrix cache
+const inverseCacheCap  = 1 << 14
+// Encode & Reconst receiver
+type (
+	rsBase reedSolomon
+	rsAVX2 reedSolomon
+	rsSSSE3 reedSolomon
+	reedSolomon struct {
+		data    int
+		parity  int
+		gen     matrix
+		inverse *matrixCache
+	}
+	matrixCache struct {
+		_padding0 [8]uint64
+		sync.RWMutex
+		_padding1 [8]uint64
+		size  uint32
+		_padding2 [8]uint64
+		cache map[uint64]matrix
+	}
 )
-
-var ErrNonSupportINS = errors.New("reedsolomon: nonsupport SIMD Extensions, need avx2 or ssse3")
 
 func New(data, parity int) (rs EncodeReconster, err error) {
-	err = CheckShardsNum(data, parity)
+	err = checkShards(data, parity)
 	if err != nil {
 		return
 	}
-	ins := GetINS()
+	ins := getINS()
 	g := genCauchyMatrix(data, parity)
-	if ins == Base {
-		return rsBase{gen: g, in: data, out: parity}, nil
-	}
-	t := genTables(g)
+	c := make(map[uint64]matrix)
 	switch ins {
-	case AVX2:
-		return rsAVX2{tables: t, in: data, out: parity}, nil
-	case SSSE3:
-		return rsSSSE3{tables: t, in: data, out: parity}, nil
+	case avx2:
+		return &rsAVX2{data: data, parity: parity, gen: g, inverse:&matrixCache{cache:c}}, nil
+	case ssse3:
+		return &rsSSSE3{data: data, parity: parity, gen: g, inverse:&matrixCache{cache:c}}, nil
 	default:
-		err = ErrNonSupportINS
-		return
+		return &rsBase{data: data, parity: parity, gen: g, inverse:&matrixCache{cache:c}}, nil
 	}
 }
 
-// check should be done before transport data to the rs engine server
-var ErrTooFewShards = errors.New("reedsolomon: too few shards given for encoding")
-var ErrTooManyShards = errors.New("reedsolomon: too many shards given for encoding")
-
-func CheckShardsNum(d, p int) error {
-	if (d <= 0) || (p <= 0) {
-		return ErrTooFewShards
-	}
-	if d+p >= 255 {
-		return ErrTooManyShards
-	}
-	return nil
-}
-
-var ErrShardEmpty = errors.New("reedsolomon: shards size equal 0")
-var ErrShardNoMatch = errors.New("reedsolomon: shards size not match")
-var ErrShardSize = errors.New("reedsolomon: shard size must be integral multiple of 256B(AVX2)/128B(SSSE3)")
-
+// Instruction Extensions Flags
 const (
-	LoopSizeAVX2  int = 256 // size of per avx2 encode loop
-	LoopSizeSSSE3 int = 16  // size of per ssse3 encode loop
+	base      = iota
+	avx2
+	ssse3
 )
 
-var ErrNoNeedRepair = errors.New("reedsolomon: no shard need repair")
-
-func CheckShardsReconst(d, p, size, ins int, dp Matrix, have, lost []int) error {
-	err := CheckShards(d, p, size, ins, dp[:d], dp[d:])
-	if err != nil {
-		return err
-	}
-	if len(lost) == 0 {
-		return ErrNoNeedRepair
-	}
-	if len(lost) > p {
-		return ErrTooFewShards
-	}
-	if len(have) != d {
-		return ErrTooFewShards
-	}
-	return nil
-}
-
-func CheckShards(d, p, size, ins int, in, out Matrix) error {
-	err := CheckMatrixRows(d, p, in, out)
-	if err != nil {
-		return err
-	}
-	err = CheckShardSize(size, ins, in, out)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func CheckShardSize(size, ins int, in, out Matrix) error {
-	if size == 0 {
-		return ErrShardEmpty
-	}
-	for _, v := range in {
-		if len(v) != size {
-			return ErrShardNoMatch
-		}
-	}
-	for _, v := range out {
-		if len(v) != size {
-			return ErrShardNoMatch
-		}
-	}
-	loopSize := 1
-	switch ins {
-	case AVX2:
-		loopSize = LoopSizeAVX2
-	case SSSE3:
-		loopSize = LoopSizeSSSE3
-	}
-	if (size/loopSize)*(loopSize) != size {
-		return ErrShardSize
-	}
-	return nil
-}
-
-var ErrDataShards = errors.New("reedsolomon: num of data shards not match")
-var ErrParityShards = errors.New("reedsolomon: num of parity shards not match")
-
-func CheckMatrixRows(d, p int, in, out Matrix) error {
-	if d != len(in) {
-		return ErrDataShards
-	}
-	if p != len(out) {
-		return ErrParityShards
-	}
-	return nil
-}
-
-func GetINS() int {
+func getINS() int {
 	if hasAVX2() {
-		return AVX2
+		return avx2
 	} else if hasSSSE3() {
-		return SSSE3
+		return ssse3
 	} else {
-		return Base
+		return base
 	}
-}
-
-func genTables(gen Matrix) []byte {
-	rows := len(gen)
-	cols := len(gen[0])
-	tables := make([]byte, 32*rows*cols)
-	for i := 0; i < cols; i++ {
-		for j := 0; j < rows; j++ {
-			c := gen[j][i]
-			offset := (i*rows + j) * 32
-			l := mulTableLow[c][:]
-			copy(tables[offset:offset+16], l)
-			h := mulTableHigh[c][:]
-			copy(tables[offset+16:offset+32], h)
-		}
-	}
-	return tables
 }
 
 //go:noescape
@@ -178,3 +79,17 @@ func hasAVX2() bool
 
 //go:noescape
 func hasSSSE3() bool
+
+// Check EC Shards
+var errInvShards = errors.New("reedsolomon: data or parity shards must > 0")
+var errMaxShards = errors.New("reedsolomon: shards must <= 256")
+
+func checkShards(d, p int) error {
+	if (d <= 0) || (p <= 0) {
+		return errInvShards
+	}
+	if d+p >= 255 {
+		return errMaxShards
+	}
+	return nil
+}

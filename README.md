@@ -1,5 +1,11 @@
 # Reed-Solomon
 
+## Branch
+
+**Master** : accept any size of data
+
+**0.1**    : only accept 256*x or 16*x byte per data shard
+
 ## Reed-Solomon Erasure Code engine in pure Go.
 
 more than 5GB/s per physics core, almost as fast as Intel ISA-L

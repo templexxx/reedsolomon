@@ -1,18 +1,18 @@
 #include "textflag.h"
 
+// func mulSSSE3(low, high, in, out []byte)
 TEXT ·mulSSSE3(SB), NOSPLIT, $0
-	MOVQ   lowTable+0(FP), AX
-	MOVQ   AX, BX
-	ADDQ   $16, BX
+	MOVQ   low+0(FP), AX
+	MOVQ   high+24(FP), BX
 	MOVOU  (AX), X0
 	MOVOU  (BX), X1
-	MOVQ   in+24(FP), AX
-	MOVQ   out+48(FP), BX
+	MOVQ   in+48(FP), AX
+	MOVQ   out+72(FP), BX
 	MOVQ   $15, CX
 	MOVQ   CX, X3
 	PXOR   X2, X2
 	PSHUFB X2, X3
-	MOVQ   in_len+32(FP), CX
+	MOVQ   in_len+56(FP), CX
 	SHRQ   $4, CX
 
 loop:
@@ -33,19 +33,19 @@ loop:
 	JNZ    loop
 	RET
 
+// func mulXORSSSE3(low, high, in, out []byte)
 TEXT ·mulXORSSSE3(SB), NOSPLIT, $0
-	MOVQ   lowTable+0(FP), AX
-	MOVQ   AX, BX
-	ADDQ   $16, BX
+	MOVQ   low+0(FP), AX
+	MOVQ   high+24(FP), BX
 	MOVOU  (AX), X0
 	MOVOU  (BX), X1
-	MOVQ   in+24(FP), AX
-	MOVQ   out+48(FP), BX
+	MOVQ   in+48(FP), AX
+	MOVQ   out+72(FP), BX
 	MOVQ   $15, CX
 	MOVQ   CX, X3
 	PXOR   X2, X2
 	PSHUFB X2, X3
-	MOVQ   in_len+32(FP), CX
+	MOVQ   in_len+56(FP), CX
 	SHRQ   $4, CX
 
 loop:
