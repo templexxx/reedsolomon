@@ -25,3 +25,7 @@ _testmain.go
 /.idea
 /backup
 /loopunroll/
+cpu.out
+mathtool/galois/
+mathtool/matrix/
+mem.out
