@@ -76,3 +76,4 @@ TEXT ·hasSSSE3(SB), NOSPLIT, $0
 	ANDQ $1, CX
 	MOVB CX, ret+0(FP)
 	RET
+

@@ -10,6 +10,17 @@ import (
 	"sync"
 )
 
+// SIMD Instruction Extensions
+const (
+	none = iota
+	avx2
+	// SSSE3 was first introduced with Intel processors based on the Core microarchitecture
+	// on 26 June 2006 with the "Woodcrest" Xeons.
+	ssse3
+)
+
+var extension = none
+
 type EncodeReconster interface {
 	Encode(shards matrix) error
 	Reconstruct(shards matrix) error
@@ -24,30 +35,29 @@ type (
 	rsAVX2 reedSolomon
 	rsSSSE3 reedSolomon
 	reedSolomon struct {
+		tables  []byte
 		data    int
 		parity  int
 		gen     matrix
-		inverse *matrixCache
+		inverse matrixCache
 	}
 	matrixCache struct {
-		_padding0 [8]uint64
 		sync.RWMutex
-		_padding1 [8]uint64
-		size  uint32
-		_padding2 [8]uint64
+		cnt  uint32
+		// k = data+parity should < 64
+		// I think it's enough
 		cache map[uint64]matrix
 	}
 )
 
-func New(data, parity int) (rs EncodeReconster, err error) {
+func New(data, parity int) (enc EncodeReconster, err error) {
 	err = checkShards(data, parity)
 	if err != nil {
 		return
 	}
-	ins := getINS()
 	g := genCauchyMatrix(data, parity)
 	c := make(map[uint64]matrix)
-	switch ins {
+	switch extension {
 	case avx2:
 		return &rsAVX2{data: data, parity: parity, gen: g, inverse:&matrixCache{cache:c}}, nil
 	case ssse3:
@@ -56,29 +66,6 @@ func New(data, parity int) (rs EncodeReconster, err error) {
 		return &rsBase{data: data, parity: parity, gen: g, inverse:&matrixCache{cache:c}}, nil
 	}
 }
-
-// Instruction Extensions Flags
-const (
-	base      = iota
-	avx2
-	ssse3
-)
-
-func getINS() int {
-	if hasAVX2() {
-		return avx2
-	} else if hasSSSE3() {
-		return ssse3
-	} else {
-		return base
-	}
-}
-
-//go:noescape
-func hasAVX2() bool
-
-//go:noescape
-func hasSSSE3() bool
 
 // Check EC Shards
 var errInvShards = errors.New("reedsolomon: data or parity shards must > 0")
@@ -93,3 +80,23 @@ func checkShards(d, p int) error {
 	}
 	return nil
 }
+
+func genTables(gen matrix) []byte {
+	rows := len(gen)
+	cols := len(gen[0])
+	tables := make([]byte, 32*rows*cols)
+	for i := 0; i < cols; i++ {
+		for j := 0; j < rows; j++ {
+			c := gen[j][i]
+			offset := (i*rows + j) * 32
+			l := mulTableLow[c][:]
+			copy(tables[offset:offset+16], l)
+			h := mulTableHigh[c][:]
+			copy(tables[offset+16:offset+32], h)
+		}
+	}
+	return tables
+}
+
+
+

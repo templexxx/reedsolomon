@@ -76,3 +76,7 @@ TEXT ·hasAVX2(SB), NOSPLIT, $0
 	MOVB BX, ret+0(FP)
 	RET
 
+
+
+
+

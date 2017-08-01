@@ -5,51 +5,6 @@ import "errors"
 // size of sub-vector
 const UnitSize int = 16 * 1024
 
-func (r *rsAVX2) Encode(shards matrix) (err error) {
-	err = CheckEncodeShards(r.data, r.parity, shards)
-	if err != nil {
-		return
-	}
-	in := shards[:r.data]
-	out := shards[r.data:]
-	size := len(in[0])
-	start, end := 0, 0
-	do := UnitSize
-	for start < size {
-		end = start + do
-		if end <= size {
-			r.matrixMul(start, end, in, out)
-			start = end
-		} else {
-			r.matrixMulRemain(start, size, in, out)
-			start = size
-		}
-	}
-	return
-}
-
-func (r *rsSSSE3) Encode(shards matrix) (err error) {
-	err = CheckEncodeShards(r.data, r.parity, shards)
-	if err != nil {
-		return
-	}
-	in := shards[:r.data]
-	out := shards[r.data:]
-	size := len(in[0])
-	start, end := 0, 0
-	do := UnitSize
-	for start < size {
-		end = start + do
-		if end <= size {
-			r.matrixMul(start, end, in, out)
-			start = end
-		} else {
-			r.matrixMulRemain(start, size, in, out)
-			start = size
-		}
-	}
-	return
-}
 
 func (r *rsBase) Encode(shards matrix) (err error) {
 	err = CheckEncodeShards(r.data, r.parity, shards)
@@ -112,87 +67,6 @@ func CheckShardSize(shards matrix) error {
 
 ////////////// Internal Functions //////////////
 // matrix multiply
-// avx2
-func (r *rsAVX2) matrixMul(start, end int, in, out matrix) {
-	for i := 0; i < r.data; i++ {
-		for oi := 0; oi < r.parity; oi++ {
-			c := r.gen[oi][i]
-			low := mulTableLow[c][:]
-			high := mulTableHigh[c][:]
-			if i == 0 {
-				mulAVX2(low, high, in[i][start:end], out[oi][start:end])
-			} else {
-				mulXORAVX2(low, high, in[i][start:end], out[oi][start:end])
-			}
-		}
-	}
-}
-
-func (r *rsAVX2) matrixMulRemain(start, end int, in, out matrix) {
-	r.matrixMul(start, end, in, out)
-	done := (end >> 5) << 5
-	remain := end - done
-	if remain > 0 {
-		g := r.gen
-		start = start + done
-		for i := 0; i < r.data; i++ {
-			for oi := 0; oi < r.parity; oi++ {
-				if i == 0 {
-					mulBase(g[oi][i], in[i][start:end], out[oi][start:end])
-				} else {
-					mulXORBase(g[oi][i], in[i][start:end], out[oi][start:end])
-				}
-			}
-		}
-	}
-}
-
-//go:noescape
-func mulAVX2(low, high, in, out []byte)
-
-//go:noescape
-func mulXORAVX2(low, high, in, out []byte)
-
-// ssse3
-func (r *rsSSSE3) matrixMul(start, end int, in, out matrix) {
-	for i := 0; i < r.data; i++ {
-		for oi := 0; oi < r.parity; oi++ {
-			c := r.gen[oi][i]
-			low := mulTableLow[c][:]
-			high := mulTableHigh[c][:]
-			if i == 0 {
-				mulSSSE3(low, high, in[i][start:end], out[oi][start:end])
-			} else {
-				mulXORSSSE3(low, high, in[i][start:end], out[oi][start:end])
-			}
-		}
-	}
-}
-
-func (r *rsSSSE3) matrixMulRemain(start, end int, in, out matrix) {
-	r.matrixMul(start, end, in, out)
-	done := (end >> 4) << 4
-	remain := end - done
-	if remain > 0 {
-		gen := r.gen
-		start = start + done
-		for i := 0; i < r.data; i++ {
-			for oi := 0; oi < r.parity; oi++ {
-				if i == 0 {
-					mulBase(gen[oi][i], in[i][start:end], out[oi][start:end])
-				} else {
-					mulXORBase(gen[oi][i], in[i][start:end], out[oi][start:end])
-				}
-			}
-		}
-	}
-}
-
-//go:noescape
-func mulSSSE3(low, high, in, out []byte)
-
-//go:noescape
-func mulXORSSSE3(low, high, in, out []byte)
 
 func mulBase(c byte, in, out []byte) {
 	mt := mulTable[c]
