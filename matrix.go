@@ -37,7 +37,7 @@ func genCauchyMatrix(d, p int) matrix {
 	for i := cols; i < rows; i++ {
 		for j := 0; j < cols; j++ {
 			d := i ^ j
-			a := inverseTable[d]
+			a := inverseTbl[d]
 			m[start][j] = byte(a)
 		}
 		start++
@@ -118,7 +118,7 @@ func (m matrix) gaussJordan() error {
 		// Scale to 1.
 		if m[r][r] != 1 {
 			d := m[r][r]
-			scale := inverseTable[d]
+			scale := inverseTbl[d]
 			// every element(this column) * m[r][r]'s inverse
 			for c := 0; c < columns; c++ {
 				m[r][c] = gfMul(m[r][c], scale)
@@ -176,5 +176,5 @@ func (m matrix) swapRows(r1, r2 int) {
 }
 
 func gfMul(a, b byte) byte {
-	return mulTable[a][b]
+	return mulTbl[a][b]
 }

@@ -8,6 +8,7 @@ package reedsolomon
 import (
 	"errors"
 	"sync"
+	"archive/tar"
 )
 
 // SIMD Instruction Extensions
@@ -59,11 +60,11 @@ func New(data, parity int) (enc EncodeReconster, err error) {
 	c := make(map[uint64]matrix)
 	switch extension {
 	case avx2:
-		return &rsAVX2{data: data, parity: parity, gen: g, inverse:&matrixCache{cache:c}}, nil
+		return &rsAVX2{data: data, parity: parity, gen: g, inverse:matrixCache{cache:c}}, nil
 	case ssse3:
-		return &rsSSSE3{data: data, parity: parity, gen: g, inverse:&matrixCache{cache:c}}, nil
+		return &rsSSSE3{data: data, parity: parity, gen: g, inverse:matrixCache{cache:c}}, nil
 	default:
-		return &rsBase{data: data, parity: parity, gen: g, inverse:&matrixCache{cache:c}}, nil
+		return &rsBase{data: data, parity: parity, gen: g, inverse:matrixCache{cache:c}}, nil
 	}
 }
 
@@ -97,6 +98,23 @@ func genTables(gen matrix) []byte {
 	}
 	return tables
 }
+
+//func genTables(gen matrix) []byte {
+//	rows := len(gen)
+//	cols := len(gen[0])
+//	tables := make([]byte, 32*rows*cols)
+//	for i := 0; i < cols; i++ {
+//		for j := 0; j < rows; j++ {
+//			c := gen[j][i]
+//			offset := (i*rows + j) * 32
+//			l := mulTableLow[c][:]
+//			copy(tables[offset:offset+16], l)
+//			h := mulTableHigh[c][:]
+//			copy(tables[offset+16:offset+32], h)
+//		}
+//	}
+//	return tables
+//}
 
 
 

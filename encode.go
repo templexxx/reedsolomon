@@ -69,14 +69,14 @@ func CheckShardSize(shards matrix) error {
 // matrix multiply
 
 func mulBase(c byte, in, out []byte) {
-	mt := mulTable[c]
+	mt := mulTbl[c]
 	for i := 0; i < len(in); i++ {
 		out[i] = mt[in[i]]
 	}
 }
 
 func mulXORBase(c byte, in, out []byte) {
-	mt := mulTable[c]
+	mt := mulTbl[c]
 	for i := 0; i < len(in); i++ {
 		out[i] ^= mt[in[i]]
 	}
