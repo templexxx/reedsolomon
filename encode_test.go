@@ -30,7 +30,7 @@ func TestVerifyBaseEncode(t *testing.T) {
 		{0, 0},
 	}
 	gen := genCauchyMatrix(d, p)
-	r := &rsBase{gen: gen, data: d, parity: p}
+	r := &encBase{gen: gen, data: d, parity: p}
 	r.Encode(shards)
 	if shards[5][0] != 97 || shards[5][1] != 64 {
 		t.Fatal("shard 5 mismatch")
@@ -159,12 +159,12 @@ func BenchmarkAVX2Encode10x4x32MB(b *testing.B) {
 
 func benchAVX2Encode(b *testing.B, d, p, size int) {
 	gen := genCauchyMatrix(d, p)
-	dp := NewMatrix(d+p, size)
+	dp := newMatrix(d+p, size)
 	for i := 0; i < d; i++ {
 		rand.Seed(int64(i))
 		fillRandom(dp[i])
 	}
-	e := &rsAVX2{gen: gen, data: d, parity: p}
+	e := &encAVX2{gen: gen, data: d, parity: p}
 	b.SetBytes(int64(d * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -177,12 +177,12 @@ func benchAVX2Encode(b *testing.B, d, p, size int) {
 
 func benchBaseEncode(b *testing.B, d, p, size int) {
 	gen := genCauchyMatrix(d, p)
-	dp := NewMatrix(d+p, size)
+	dp := newMatrix(d+p, size)
 	for i := 0; i < d; i++ {
 		rand.Seed(int64(i))
 		fillRandom(dp[i])
 	}
-	e := &rsBase{gen: gen, data: d, parity: p}
+	e := &encBase{gen: gen, data: d, parity: p}
 	b.SetBytes(int64(d * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -195,7 +195,7 @@ func benchBaseEncode(b *testing.B, d, p, size int) {
 
 func verifyFastEncode(t *testing.T, d, p, size, ins int) {
 	gen := genCauchyMatrix(d, p)
-	dp := NewMatrix(d+p, size)
+	dp := newMatrix(d+p, size)
 	for i := 0; i < d; i++ {
 		rand.Seed(int64(i))
 		fillRandom(dp[i])
@@ -203,17 +203,17 @@ func verifyFastEncode(t *testing.T, d, p, size, ins int) {
 	var e EncodeReconster
 	switch ins {
 	case avx2:
-		e = &rsAVX2{data: d, parity: p, gen: gen}
+		e = &encAVX2{data: d, parity: p, gen: gen}
 	case ssse3:
-		e = &rsSSSE3{data: d, parity: p, gen: gen}
+		e = &encSSSE3{data: d, parity: p, gen: gen}
 	}
 	e.Encode(dp)
 	// mulTable
-	bDP := NewMatrix(d+p, size)
+	bDP := newMatrix(d+p, size)
 	for i := 0; i < d; i++ {
 		copy(bDP[i], dp[i])
 	}
-	e2 := &rsBase{data: d, parity: p, gen: gen}
+	e2 := &encBase{data: d, parity: p, gen: gen}
 	e2.Encode(bDP)
 	for i, asm := range dp {
 		if !bytes.Equal(asm, bDP[i]) {

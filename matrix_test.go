@@ -102,7 +102,7 @@ func BenchmarkInvert10x10(b *testing.B) {
 }
 
 func benchmarkInvert(b *testing.B, size int) {
-	m := NewMatrix(size, size)
+	m := newMatrix(size, size)
 	rand.Seed(0)
 	for i := 0; i < size; i++ {
 		fillRandom(m[i])

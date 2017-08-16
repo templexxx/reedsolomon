@@ -23,12 +23,12 @@ func TestVerifyReconstBase(t *testing.T) {
 		{0, 0},
 	}
 	gen := genCauchyMatrix(d, p)
-	r := rsBase{data: d, parity: p, gen: gen}
+	r := encBase{data: d, parity: p, gen: gen}
 	r.Encode(shards)
 
 	have := []int{9, 8, 7, 1, 3}
 	lost := []int{5, 6, 4, 2, 0}
-	newShards := NewMatrix(10, 2)
+	newShards := newMatrix(10, 2)
 	for _, h := range have {
 		copy(newShards[h], shards[h])
 	}
@@ -58,7 +58,7 @@ func TestVerifyReconstAVX2(t *testing.T) {
 	d := 10
 	p := 4
 	size := 256
-	dp := NewMatrix(d+p, size)
+	dp := newMatrix(d+p, size)
 	for i := 0; i < d; i++ {
 		rand.Seed(int64(i))
 		fillRandom(dp[i])
@@ -68,7 +68,7 @@ func TestVerifyReconstAVX2(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Encode(dp)
-	dp2 := NewMatrix(d+p, size)
+	dp2 := newMatrix(d+p, size)
 	have := []int{0, 13, 2, 5, 6, 7, 8, 9, 11, 1}
 	lost := []int{10, 12, 3, 4}
 	for _, h := range have {
@@ -107,7 +107,7 @@ func benchmarkReconst(b *testing.B, d, p, size, repair int) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	dp := NewMatrix(d+p, size)
+	dp := newMatrix(d+p, size)
 	for s := 0; s < d; s++ {
 		rand.Seed(int64(s))
 		fillRandom(dp[s])
@@ -132,7 +132,7 @@ func benchmarkReconstData(b *testing.B, d, p, size, repair int) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	dp := NewMatrix(d+p, size)
+	dp := newMatrix(d+p, size)
 	for s := 0; s < d; s++ {
 		rand.Seed(int64(s))
 		fillRandom(dp[s])

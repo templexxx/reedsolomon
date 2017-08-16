@@ -3,32 +3,32 @@ package reedsolomon
 import "errors"
 
 // set shard nil if lost
-func (r *rsAVX2) Reconstruct(shards matrix) (err error) {
+func (r *encAVX2) Reconstruct(shards matrix) (err error) {
 	return r.reconst(shards, false)
 }
 
-func (r *rsAVX2) ReconstructData(shards matrix) (err error) {
+func (r *encAVX2) ReconstructData(shards matrix) (err error) {
 	return r.reconst(shards, true)
 }
 
-func (r *rsSSSE3) Reconstruct(shards matrix) (err error) {
+func (r *encSSSE3) Reconstruct(shards matrix) (err error) {
 	return r.reconst(shards, false)
 }
 
-func (r *rsSSSE3) ReconstructData(shards matrix) (err error) {
+func (r *encSSSE3) ReconstructData(shards matrix) (err error) {
 	return r.reconst(shards, true)
 }
 
-func (r *rsBase) Reconstruct(shards matrix) (err error) {
+func (r *encBase) Reconstruct(shards matrix) (err error) {
 	return r.reconst(shards, false)
 }
 
-func (r *rsBase) ReconstructData(shards matrix) (err error) {
+func (r *encBase) ReconstructData(shards matrix) (err error) {
 	return r.reconst(shards, true)
 }
 
 ////////////// Internal Functions //////////////
-func (r *rsAVX2) reconst(shards matrix, dataOnly bool) (err error) {
+func (r *encAVX2) reconst(shards matrix, dataOnly bool) (err error) {
 	stat, err := getReconstStat(r.data, r.parity, shards, dataOnly)
 	if err != nil {
 		if err == ErrNoNeedRepair {
@@ -48,24 +48,24 @@ func (r *rsAVX2) reconst(shards matrix, dataOnly bool) (err error) {
 	return nil
 }
 
-func (r *rsAVX2) reconstData(shards matrix, size int, have, dataLost []int) error {
+func (r *encAVX2) reconstData(shards matrix, size int, have, dataLost []int) error {
 	dpTmp, gen, err := genReconstMatrix(shards, r.data, r.parity, size, have, dataLost)
 	if err != nil {
 		return err
 	}
-	e := &rsAVX2{data: r.data, parity: len(dataLost), gen: gen}
+	e := &encAVX2{data: r.data, parity: len(dataLost), gen: gen}
 	e.Encode(dpTmp)
 	return nil
 }
 
-func (r *rsAVX2) reconstParity(shards matrix, size int, parityLost []int) {
+func (r *encAVX2) reconstParity(shards matrix, size int, parityLost []int) {
 	genTmp := genCauchyMatrix(r.data, r.parity)
 	numPL := len(parityLost)
-	gen := NewMatrix(numPL, r.data)
+	gen := newMatrix(numPL, r.data)
 	for i, l := range parityLost {
 		gen[i] = genTmp[l-r.data]
 	}
-	dpTmp := NewMatrix(r.data+numPL, size)
+	dpTmp := newMatrix(r.data+numPL, size)
 	for i := 0; i < r.data; i++ {
 		dpTmp[i] = shards[i]
 	}
@@ -73,11 +73,11 @@ func (r *rsAVX2) reconstParity(shards matrix, size int, parityLost []int) {
 		shards[l] = make([]byte, size)
 		dpTmp[i+r.data] = shards[l]
 	}
-	e := &rsAVX2{data: r.data, parity: numPL, gen: gen}
+	e := &encAVX2{data: r.data, parity: numPL, gen: gen}
 	e.Encode(dpTmp)
 }
 
-func (r *rsSSSE3) reconst(shards matrix, dataOnly bool) (err error) {
+func (r *encSSSE3) reconst(shards matrix, dataOnly bool) (err error) {
 	stat, err := getReconstStat(r.data, r.parity, shards, dataOnly)
 	if err != nil {
 		if err == ErrNoNeedRepair {
@@ -97,7 +97,7 @@ func (r *rsSSSE3) reconst(shards matrix, dataOnly bool) (err error) {
 	return nil
 }
 
-func (r *rsBase) reconst(shards matrix, dataOnly bool) (err error) {
+func (r *encBase) reconst(shards matrix, dataOnly bool) (err error) {
 	stat, err := getReconstStat(r.data, r.parity, shards, dataOnly)
 	if err != nil {
 		if err == ErrNoNeedRepair {
@@ -117,24 +117,24 @@ func (r *rsBase) reconst(shards matrix, dataOnly bool) (err error) {
 	return nil
 }
 
-func (r *rsSSSE3) reconstData(shards matrix, size int, have, dataLost []int) error {
+func (r *encSSSE3) reconstData(shards matrix, size int, have, dataLost []int) error {
 	dpTmp, gen, err := genReconstMatrix(shards, r.data, r.parity, size, have, dataLost)
 	if err != nil {
 		return err
 	}
-	e := &rsSSSE3{data: r.data, parity: len(dataLost), gen: gen}
+	e := &encSSSE3{data: r.data, parity: len(dataLost), gen: gen}
 	e.Encode(dpTmp)
 	return nil
 }
 
-func (r *rsSSSE3) reconstParity(shards matrix, size int, parityLost []int) {
+func (r *encSSSE3) reconstParity(shards matrix, size int, parityLost []int) {
 	genTmp := genCauchyMatrix(r.data, r.parity)
 	numPL := len(parityLost)
-	gen := NewMatrix(numPL, r.data)
+	gen := newMatrix(numPL, r.data)
 	for i, l := range parityLost {
 		gen[i] = genTmp[l-r.data]
 	}
-	dpTmp := NewMatrix(r.data+numPL, size)
+	dpTmp := newMatrix(r.data+numPL, size)
 	for i := 0; i < r.data; i++ {
 		dpTmp[i] = shards[i]
 	}
@@ -142,28 +142,28 @@ func (r *rsSSSE3) reconstParity(shards matrix, size int, parityLost []int) {
 		shards[l] = make([]byte, size)
 		dpTmp[i+r.data] = shards[l]
 	}
-	e := &rsSSSE3{data: r.data, parity: numPL, gen: gen}
+	e := &encSSSE3{data: r.data, parity: numPL, gen: gen}
 	e.Encode(dpTmp)
 }
 
-func (r *rsBase) reconstData(shards matrix, size int, have, dataLost []int) error {
+func (r *encBase) reconstData(shards matrix, size int, have, dataLost []int) error {
 	dpTmp, gen, err := genReconstMatrix(shards, r.data, r.parity, size, have, dataLost)
 	if err != nil {
 		return err
 	}
-	e := &rsBase{data: r.data, parity: len(dataLost), gen: gen}
+	e := &encBase{data: r.data, parity: len(dataLost), gen: gen}
 	e.Encode(dpTmp)
 	return nil
 }
 
-func (r *rsBase) reconstParity(shards matrix, size int, parityLost []int) {
+func (r *encBase) reconstParity(shards matrix, size int, parityLost []int) {
 	genTmp := genCauchyMatrix(r.data, r.parity)
 	numPL := len(parityLost)
-	gen := NewMatrix(numPL, r.data)
+	gen := newMatrix(numPL, r.data)
 	for i, l := range parityLost {
 		gen[i] = genTmp[l-r.data]
 	}
-	dpTmp := NewMatrix(r.data+numPL, size)
+	dpTmp := newMatrix(r.data+numPL, size)
 	for i := 0; i < r.data; i++ {
 		dpTmp[i] = shards[i]
 	}
@@ -171,15 +171,15 @@ func (r *rsBase) reconstParity(shards matrix, size int, parityLost []int) {
 		shards[l] = make([]byte, size)
 		dpTmp[i+r.data] = shards[l]
 	}
-	e := &rsBase{data: r.data, parity: numPL, gen: gen}
+	e := &encBase{data: r.data, parity: numPL, gen: gen}
 	e.Encode(dpTmp)
 }
 
 func genReconstMatrix(shards matrix, data, parity, size int, have, dataLost []int) (dpTmp, gen matrix, err error) {
-	e := GenEncodeMatrix(data, parity)
-	decodeM := NewMatrix(data, data)
+	e := genEncMatrix(data, parity)
+	decodeM := newMatrix(data, data)
 	numDL := len(dataLost)
-	dpTmp = NewMatrix(data+numDL, size)
+	dpTmp = newMatrix(data+numDL, size)
 	for i := 0; i < data; i++ {
 		h := have[i]
 		dpTmp[i] = shards[h]
@@ -193,7 +193,7 @@ func genReconstMatrix(shards matrix, data, parity, size int, have, dataLost []in
 	if err != nil {
 		return
 	}
-	gen = NewMatrix(numDL, data)
+	gen = newMatrix(numDL, data)
 	for i, l := range dataLost {
 		gen[i] = decodeM[l]
 	}

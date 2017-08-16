@@ -6,7 +6,7 @@ import "errors"
 const UnitSize int = 16 * 1024
 
 
-func (r *rsBase) Encode(shards matrix) (err error) {
+func (r *encBase) Encode(shards matrix) (err error) {
 	err = CheckEncodeShards(r.data, r.parity, shards)
 	if err != nil {
 		return

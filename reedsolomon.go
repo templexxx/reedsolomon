@@ -8,15 +8,12 @@ package reedsolomon
 import (
 	"errors"
 	"sync"
-	"archive/tar"
 )
 
 // SIMD Instruction Extensions
 const (
 	none = iota
 	avx2
-	// SSSE3 was first introduced with Intel processors based on the Core microarchitecture
-	// on 26 June 2006 with the "Woodcrest" Xeons.
 	ssse3
 )
 
@@ -28,25 +25,29 @@ type EncodeReconster interface {
 	ReconstructData(shards matrix) error
 }
 
-// the cap of inverse Matrix cache
-const inverseCacheCap  = 1 << 14
+const inverseCacheCap = 1 << 14               // the cap of inverse Matrix cache
+const limitInverseMatrixCacheRows = 1<<64 - 1 //data+parity should < 64, I think that's enough
+
 // Encode & Reconst receiver
 type (
-	rsBase reedSolomon
-	rsAVX2 reedSolomon
-	rsSSSE3 reedSolomon
-	reedSolomon struct {
-		tables  []byte
+	encBase   encNoSIMD
+	encAVX2   encSIMD
+	encSSSE3  encSIMD
+	encNoSIMD struct {
 		data    int
 		parity  int
-		gen     matrix
+		encM    matrix // encode matrix include a identity_matrix & cauchy_matrix
 		inverse matrixCache
+	}
+	encSIMD struct {
+		data    int
+		parity  int
+		encM    matrix
+		inverse matrixCache
+		tables  []byte
 	}
 	matrixCache struct {
 		sync.RWMutex
-		cnt  uint32
-		// k = data+parity should < 64
-		// I think it's enough
 		cache map[uint64]matrix
 	}
 )
@@ -56,15 +57,18 @@ func New(data, parity int) (enc EncodeReconster, err error) {
 	if err != nil {
 		return
 	}
+	e := genEncMatrix(data, parity)
+	return newRS(data, parity, e), nil
 	g := genCauchyMatrix(data, parity)
 	c := make(map[uint64]matrix)
 	switch extension {
+	// 分别两个 newrs 以使用加速的gentables
 	case avx2:
-		return &rsAVX2{data: data, parity: parity, gen: g, inverse:matrixCache{cache:c}}, nil
+		return &encAVX2{data, parity, gen: g, inverse: matrixCache{cache: c}}, nil
 	case ssse3:
-		return &rsSSSE3{data: data, parity: parity, gen: g, inverse:matrixCache{cache:c}}, nil
+		return &encSSSE3{data: data, parity: parity, gen: g, inverse: matrixCache{cache: c}}, nil
 	default:
-		return &rsBase{data: data, parity: parity, gen: g, inverse:matrixCache{cache:c}}, nil
+		return &encBase{data: data, parity: parity, gen: g, inverse: matrixCache{cache: c}}, nil
 	}
 }
 
@@ -115,6 +119,3 @@ func genTables(gen matrix) []byte {
 //	}
 //	return tables
 //}
-
-
-

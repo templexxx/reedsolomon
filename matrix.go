@@ -2,9 +2,9 @@ package reedsolomon
 
 import "errors"
 
-type matrix [][]byte // byte[row][col]
+type matrix [][]byte
 
-func NewMatrix(rows, cols int) matrix {
+func newMatrix(rows, cols int) matrix {
 	m := matrix(make([][]byte, rows))
 	for i := range m {
 		m[i] = make([]byte, cols)
@@ -12,27 +12,34 @@ func NewMatrix(rows, cols int) matrix {
 	return m
 }
 
-// return identity matrix(upper) cauchy matrix(lower)
-func GenEncodeMatrix(d, p int) matrix {
+// generate a EncodeMatrix : identity_matrix(upper) cauchy_matrix(lower)
+func genEncMatrix(d, p int) matrix {
 	rows := d + p
 	cols := d
-	m := NewMatrix(rows, cols)
+	m := newMatrix(rows, cols)
 	// identity matrix
 	for j := 0; j < cols; j++ {
 		m[j][j] = byte(1)
 	}
 	// cauchy matrix
-	c := genCauchyMatrix(d, p)
-	for i, v := range c {
-		copy(m[d+i], v)
+	for i := cols; i < rows; i++ {
+		for j := 0; j < cols; j++ {
+			d := i ^ j
+			a := inverseTbl[d]
+			m[i][j] = byte(a)
+		}
 	}
+	//c := genCauchyMatrix(d, p)
+	//for i, v := range c {
+	//	copy(m[d+i], v)
+	//}
 	return m
 }
 
 func genCauchyMatrix(d, p int) matrix {
 	rows := d + p
 	cols := d
-	m := NewMatrix(p, cols)
+	m := newMatrix(p, cols)
 	start := 0
 	for i := cols; i < rows; i++ {
 		for j := 0; j < cols; j++ {
@@ -44,26 +51,6 @@ func genCauchyMatrix(d, p int) matrix {
 	}
 	return m
 }
-
-// m * m1
-func (m matrix) mul(m1 matrix) (matrix, error) {
-	if len(m[0]) != len(m1) {
-		return nil, ErrMatrixMul
-	}
-	ret := NewMatrix(len(m), len(m1[0]))
-	for r, row := range ret {
-		for c := range row {
-			var value byte
-			for i := range m[0] {
-				// TODO RSBASE Encode 跟这个一样
-				value ^= gfMul(m[r][i], m1[i][c])
-			}
-			ret[r][c] = value
-		}
-	}
-	return ret, nil
-}
-var ErrMatrixMul = errors.New("reedsolomon matrix multiply: num of left cols should be same as num of right rows")
 
 func (m matrix) invert() (matrix, error) {
 	size := len(m)
@@ -77,9 +64,17 @@ func (m matrix) invert() (matrix, error) {
 	return mIM.subMatrix(size), nil
 }
 
+func identityMatrix(n int) matrix {
+	m := newMatrix(n, n)
+	for i := 0; i < n; i++ {
+		m[i][i] = byte(1)
+	}
+	return m
+}
+
 // IN -> (IN|I)
 func (m matrix) augIM(iM matrix) (matrix, error) {
-	result := NewMatrix(len(m), len(m[0])+len(iM[0]))
+	result := newMatrix(len(m), len(m[0])+len(iM[0]))
 	for r, row := range m {
 		for c := range row {
 			result[r][c] = m[r][c]
@@ -151,17 +146,9 @@ func (m matrix) gaussJordan() error {
 	return nil
 }
 
-func identityMatrix(n int) matrix {
-	m := NewMatrix(n, n)
-	for i := 0; i < n; i++ {
-		m[i][i] = byte(1)
-	}
-	return m
-}
-
 // (I|OUT) -> OUT
 func (m matrix) subMatrix(size int) matrix {
-	result := NewMatrix(size, size)
+	result := newMatrix(size, size)
 	for r := 0; r < size; r++ {
 		for c := size; c < size*2; c++ {
 			result[r][c-size] = m[r][c]

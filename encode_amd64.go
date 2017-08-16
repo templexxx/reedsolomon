@@ -44,7 +44,7 @@ func compressTables(gen matrix) []byte {
 	return tables
 }
 
-func (r *rsAVX2) Encode(shards matrix) (err error) {
+func (r *encAVX2) Encode(shards matrix) (err error) {
 	err = CheckEncodeShards(r.data, r.parity, shards)
 	if err != nil {
 		return
@@ -67,7 +67,7 @@ func (r *rsAVX2) Encode(shards matrix) (err error) {
 	return
 }
 
-func (r *rsSSSE3) Encode(shards matrix) (err error) {
+func (r *encSSSE3) Encode(shards matrix) (err error) {
 	err = CheckEncodeShards(r.data, r.parity, shards)
 	if err != nil {
 		return
@@ -91,7 +91,7 @@ func (r *rsSSSE3) Encode(shards matrix) (err error) {
 }
 
 // avx2
-func (r *rsAVX2) matrixMul(start, end int, in, out matrix) {
+func (r *encAVX2) matrixMul(start, end int, in, out matrix) {
 	for i := 0; i < r.data; i++ {
 		for oi := 0; oi < r.parity; oi++ {
 			c := r.gen[oi][i]
@@ -106,7 +106,7 @@ func (r *rsAVX2) matrixMul(start, end int, in, out matrix) {
 	}
 }
 
-func (r *rsAVX2) matrixMulRemain(start, end int, in, out matrix) {
+func (r *encAVX2) matrixMulRemain(start, end int, in, out matrix) {
 	r.matrixMul(start, end, in, out)
 	done := (end >> 5) << 5
 	remain := end - done
@@ -132,7 +132,7 @@ func mulAVX2(low, high, in, out []byte)
 func mulXORAVX2(low, high, in, out []byte)
 
 // ssse3
-func (r *rsSSSE3) matrixMul(start, end int, in, out matrix) {
+func (r *encSSSE3) matrixMul(start, end int, in, out matrix) {
 	for i := 0; i < r.data; i++ {
 		for oi := 0; oi < r.parity; oi++ {
 			c := r.gen[oi][i]
@@ -147,7 +147,7 @@ func (r *rsSSSE3) matrixMul(start, end int, in, out matrix) {
 	}
 }
 
-func (r *rsSSSE3) matrixMulRemain(start, end int, in, out matrix) {
+func (r *encSSSE3) matrixMulRemain(start, end int, in, out matrix) {
 	r.matrixMul(start, end, in, out)
 	done := (end >> 4) << 4
 	remain := end - done
