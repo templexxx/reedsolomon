@@ -1,7 +1,5 @@
 package reedsolomon
 
-import "fmt"
-
 func init() {
 	getEXT()
 }
@@ -39,7 +37,6 @@ func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
 
 // generate generator_matrix's low_high tbls
 func genTbls(gen matrix) []byte {
-	fmt.Print("sdf")
 	rows := len(gen)
 	cols := len(gen[0])
 	tbls := make([]byte, 32*rows*cols)
