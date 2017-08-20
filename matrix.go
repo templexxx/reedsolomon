@@ -1,6 +1,8 @@
 package reedsolomon
 
-import "errors"
+import (
+	"errors"
+)
 
 type matrix [][]byte
 
@@ -13,7 +15,7 @@ func newMatrix(rows, cols int) matrix {
 }
 
 // generate a EncodeMatrix : identity_matrix(upper) cauchy_matrix(lower)
-func genEncMatrix(d, p int) matrix {
+func genEncMatrixCauchy(d, p int) matrix {
 	rows := d + p
 	cols := d
 	m := newMatrix(rows, cols)
@@ -29,10 +31,6 @@ func genEncMatrix(d, p int) matrix {
 			m[i][j] = byte(a)
 		}
 	}
-	//c := genCauchyMatrix(d, p)
-	//for i, v := range c {
-	//	copy(m[d+i], v)
-	//}
 	return m
 }
 
@@ -50,6 +48,46 @@ func genCauchyMatrix(d, p int) matrix {
 		start++
 	}
 	return m
+}
+
+// generate a EncodeMatrix with a vandermonde matrix
+func genEncMatrixVand(data, parity int) (matrix, error) {
+	rows := data + parity
+	vm := genVandMatrix(rows, data)
+	top := newMatrix(data, data)
+	for i := range top {
+		copy(top[i], vm[i])
+	}
+	topInv, err := top.invert()
+	if err != nil {
+		return nil, err
+	}
+	return vm.mul(topInv), nil
+}
+
+func genVandMatrix(rows, cols int) matrix {
+	raw := newMatrix(rows, cols)
+	for r, row := range raw {
+		for c := range row {
+			raw[r][c] = gfExp(byte(r), c)
+		}
+	}
+	return raw
+}
+
+func gfExp(a byte, n int) byte {
+	if n == 0 {
+		return 1
+	}
+	if a == 0 {
+		return 0
+	}
+	logA := logTbl[a]
+	logResult := int(logA) * n
+	for logResult >= 255 {
+		logResult -= 255
+	}
+	return byte(expTbl[logResult])
 }
 
 func (m matrix) invert() (matrix, error) {
@@ -93,10 +131,10 @@ var ErrSingular = errors.New("reedsolomon: matrix is singular")
 func (m matrix) gaussJordan() error {
 	rows := len(m)
 	columns := len(m[0])
-	// Clear out the part below the main diagonal and scale the main
+	// clear out the part below the main diagonal and scale the main
 	// diagonal to be 1.
 	for r := 0; r < rows; r++ {
-		// If the element on the diagonal is 0, find a row below
+		// if the element on the diagonal is 0, find a row below
 		// that has a non-zero and swap them.
 		if m[r][r] == 0 {
 			for rowBelow := r + 1; rowBelow < rows; rowBelow++ {
@@ -106,24 +144,24 @@ func (m matrix) gaussJordan() error {
 				}
 			}
 		}
-		// After swap, if we find all elements in this column is 0, it means the matrix's det is 0
+		// after swap, if we find all elements in this column is 0, it means the matrix's det is 0
 		if m[r][r] == 0 {
 			return ErrSingular
 		}
-		// Scale to 1.
+		// scale to 1.
 		if m[r][r] != 1 {
 			d := m[r][r]
 			scale := inverseTbl[d]
-			// every element(this column) * m[r][r]'s inverse
+			// every element(this column) * m[e][e]'s mc
 			for c := 0; c < columns; c++ {
 				m[r][c] = gfMul(m[r][c], scale)
 			}
 		}
-		//Make everything below the 1 be a 0 by subtracting a multiple of it
+		// make everything below the 1 be a 0 by subtracting a multiple of it
 		for rowBelow := r + 1; rowBelow < rows; rowBelow++ {
 			if m[rowBelow][r] != 0 {
-				// scale * m[r][r] = scale, scale + scale = 0
-				// makes m[r][r+1] = 0 , then calc left elements
+				// scale * m[e][e] = scale, scale + scale = 0
+				// makes m[e][e+1] = 0 , then calc left elements
 				scale := m[rowBelow][r]
 				for c := 0; c < columns; c++ {
 					m[rowBelow][c] ^= gfMul(scale, m[r][c])
@@ -131,7 +169,7 @@ func (m matrix) gaussJordan() error {
 			}
 		}
 	}
-	// Now clear the part above the main diagonal.
+	// now clear the part above the main diagonal.
 	// same logic with clean upper
 	for d := 0; d < rows; d++ {
 		for rowAbove := 0; rowAbove < d; rowAbove++ {
@@ -157,11 +195,27 @@ func (m matrix) subMatrix(size int) matrix {
 	return result
 }
 
-// SwapRows Exchanges two rows in the matrix.
+// exchanges two rows in the matrix.
 func (m matrix) swapRows(r1, r2 int) {
 	m[r2], m[r1] = m[r1], m[r2]
 }
 
 func gfMul(a, b byte) byte {
 	return mulTbl[a][b]
+}
+
+// Multiply multiplies this matrix (the one on the left) by another
+// matrix (the one on the right) and returns a new matrix with the result.
+func (m matrix) mul(right matrix) matrix {
+	result := newMatrix(len(m), len(right[0]))
+	for r, row := range result {
+		for c := range row {
+			var value byte
+			for i := range m[0] {
+				value ^= gfMul(m[r][i], right[i][c])
+			}
+			result[r][c] = value
+		}
+	}
+	return result
 }

@@ -2,6 +2,17 @@
 
 #include "textflag.h"
 
+// func copy32B(dst, src []byte)
+TEXT ·copy32B(SB), NOSPLIT, $0
+    MOVQ dst+0(FP), AX
+    MOVQ src+24(FP), BX
+    MOVOU (BX), X0
+    MOVOU 16(BX), X1
+    MOVOU X0, (AX)
+    MOVOU X1, 16(AX)
+    VZEROUPPER
+    RET
+
 // func mulAVX2(low, high, in, out []byte)
 TEXT ·mulAVX2(SB), NOSPLIT, $0
 	MOVQ         low+0(FP), AX    // low_table addr
