@@ -32,7 +32,7 @@ type (
 	encSIMD  struct {
 		data   int
 		parity int
-		em     matrix      // encoding-matrix
+		em     matrix	// encoding-matrix
 		mc     matrixCache // inverse matrix's cache
 		tbl    []byte
 	}
@@ -51,18 +51,19 @@ type EncodeReconster interface {
 var errInvShards = errors.New("reedsolomon: data or parity shards must > 0")
 var errMaxShards = errors.New("reedsolomon: shards must <= 256")
 
-// limitRows : limit of data+parity
-// should <= 32, I think that's enough for storage system or network package reconstruct
+// limitRows : data+parity must < limitRows
 // usually, data <= 20; parity <= 5
-const limitRow = 32
+const limitRow = 255
 
-//
+// TODO find a place to put the const
+// limitRowMC : data+parity must < limitRowMC for having inverse matrix cache
+const limitRowMC = 33
 
 func checkShards(data, parity int) error {
 	if (data <= 0) || (parity <= 0) {
 		return errInvShards
 	}
-	if data+parity > limitRow {
+	if data+parity >= limitRow {
 		return errMaxShards
 	}
 	return nil
@@ -264,6 +265,8 @@ func (r *encBase) reconstParity(shards matrix, size int, parityLost []int) {
 	e.Encode(dpTmp)
 }
 
+
+
 // Check Encode Args
 // TODO what will happend if shards[i] == nil
 func checkEncodeShards(in, out int, shards matrix) error {
@@ -277,6 +280,8 @@ func checkEncodeShards(in, out int, shards matrix) error {
 	}
 	return nil
 }
+
+
 
 var ErrShardEmpty = errors.New("reedsolomon: shards size equal 0")
 var ErrShardSizeNoMatch = errors.New("reedsolomon: shards size not match")
@@ -293,3 +298,5 @@ func checkShardSize(shards matrix) error {
 	}
 	return nil
 }
+
+
