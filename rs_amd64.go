@@ -22,16 +22,38 @@ func hasAVX2() bool
 //go:noescape
 func hasSSSE3() bool
 
+// limitShardsMC : data+parity must < limitShardsMC for having inverse matrix cache
+// there is at most 38760 inverse matrix (data: 14, parity: 6, calculated by mathtool/cntinverse)
+const (
+	limitShardsMC = 33
+	limitParityMC = 5
+)
+const (
+	limitSmallShardsMC = 21
+	limitSmallParityMC = 7
+)
+
+func cacheInverse(data, parity int) bool {
+	shards := data + parity
+	if shards < limitSmallShardsMC && parity < limitSmallParityMC {
+		return true
+	}
+	if shards < limitShardsMC && parity < limitParityMC {
+		return true
+	}
+	return false
+}
+
 func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
 	if extension == none {
-		return &encBase{data: data, parity: parity, em: encodeMatrix}
+		return &encBase{data: data, parity: parity, encodeMatrix: encodeMatrix}
 	}
 	c := make(map[uint64]matrix)
 	t := genTbls(encodeMatrix[data:])
 	if extension == avx2 {
-		return &encAVX2{data: data, parity: parity, em: encodeMatrix, mc: matrixCache{cache: c}, tbl: t}
+		return &encAVX2{data: data, parity: parity, encodeMatrix: encodeMatrix, mc: matrixCache{cache: c}, tbl: t}
 	} else {
-		return &encSSSE3{data: data, parity: parity, em: encodeMatrix, mc: matrixCache{cache: c}, tbl: t}
+		return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, mc: matrixCache{cache: c}, tbl: t}
 	}
 }
 
@@ -59,7 +81,7 @@ func copy32B(dst, src []byte) // it need SSE2, first introduced in 2001. So assu
 const unitSize int = 16 * 1024
 
 func (e *encAVX2) Encode(shards matrix) (err error) {
-	err = checkEncodeShards(e.data, e.parity, shards)
+	err = checkEncVects(e.data, e.parity, shards)
 	if err != nil {
 		return
 	}
@@ -111,14 +133,14 @@ func (e *encAVX2) matrixMulRemain(start, end int, in, out matrix) {
 	done := (undone >> 5) << 5
 	undone = undone - done
 	if undone > 0 {
-		g := e.em[e.data:]
+		g := e.encodeMatrix[e.data:]
 		start = start + done
 		for i := 0; i < e.data; i++ {
 			for oi := 0; oi < e.parity; oi++ {
 				if i == 0 {
-					vectMul(g[oi][i], in[i][start:end], out[oi][start:end])
+					coeffMulVect(g[oi][i], in[i][start:end], out[oi][start:end])
 				} else {
-					vectMulPlus(g[oi][i], in[i][start:end], out[oi][start:end])
+					coeffMulVectPlus(g[oi][i], in[i][start:end], out[oi][start:end])
 				}
 			}
 		}
@@ -149,7 +171,7 @@ func vectMulAVX2Loop32(tbl, in, out []byte)
 func vectMulPlusAVX2Loop32(tbl, in, out []byte)
 
 func (e *encSSSE3) Encode(shards matrix) (err error) {
-	err = checkEncodeShards(e.data, e.parity, shards)
+	err = checkEncVects(e.data, e.parity, shards)
 	if err != nil {
 		return
 	}
@@ -201,14 +223,14 @@ func (e *encSSSE3) matrixMulRemain(start, end int, in, out matrix) {
 	done := (undone >> 4) << 4
 	undone = undone - done
 	if undone > 0 {
-		g := e.em[e.data:]
+		g := e.encodeMatrix[e.data:]
 		start = start + done
 		for i := 0; i < e.data; i++ {
 			for oi := 0; oi < e.parity; oi++ {
 				if i == 0 {
-					vectMul(g[oi][i], in[i][start:end], out[oi][start:end])
+					coeffMulVect(g[oi][i], in[i][start:end], out[oi][start:end])
 				} else {
-					vectMulPlus(g[oi][i], in[i][start:end], out[oi][start:end])
+					coeffMulVectPlus(g[oi][i], in[i][start:end], out[oi][start:end])
 				}
 			}
 		}
@@ -248,7 +270,7 @@ func (e *encAVX2) ReconstructData(shards matrix) (err error) {
 }
 
 func (e *encAVX2) reconst(shards matrix, dataOnly bool) (err error) {
-	stat, err := reconstInfo(e.data, e.parity, shards, dataOnly)
+	stat, err := getReconstInfo(e.data, e.parity, shards, dataOnly)
 	if err != nil {
 		if err == ErrNoNeedRepair {
 			return nil
@@ -256,13 +278,13 @@ func (e *encAVX2) reconst(shards matrix, dataOnly bool) (err error) {
 		return
 	}
 	if len(stat.dataLost) > 0 {
-		err := e.reconstData(shards, stat.size, stat.have, stat.dataLost)
+		err := e.reconstData(shards, stat.vectSize, stat.have, stat.dataLost)
 		if err != nil {
 			return err
 		}
 	}
 	if len(stat.parityLost) > 0 && !dataOnly {
-		e.reconstParity(shards, stat.size, stat.parityLost)
+		e.reconstParity(shards, stat.vectSize, stat.parityLost)
 	}
 	return nil
 }
@@ -297,7 +319,7 @@ func (e *encAVX2) reconstParity(shards matrix, size int, parityLost []int) {
 }
 
 func (r *encSSSE3) reconst(shards matrix, dataOnly bool) (err error) {
-	stat, err := reconstInfo(r.data, r.parity, shards, dataOnly)
+	stat, err := getReconstInfo(r.data, r.parity, shards, dataOnly)
 	if err != nil {
 		if err == ErrNoNeedRepair {
 			return nil
@@ -305,13 +327,13 @@ func (r *encSSSE3) reconst(shards matrix, dataOnly bool) (err error) {
 		return
 	}
 	if len(stat.dataLost) > 0 {
-		err := r.reconstData(shards, stat.size, stat.have, stat.dataLost)
+		err := r.reconstData(shards, stat.vectSize, stat.have, stat.dataLost)
 		if err != nil {
 			return err
 		}
 	}
 	if len(stat.parityLost) > 0 && !dataOnly {
-		r.reconstParity(shards, stat.size, stat.parityLost)
+		r.reconstParity(shards, stat.vectSize, stat.parityLost)
 	}
 	return nil
 }
@@ -355,27 +377,4 @@ func (r *encSSSE3) reconstParity(shards matrix, size int, parityLost []int) {
 	e.Encode(dpTmp)
 }
 
-func genReconstMatrix(shards matrix, data, parity, size int, have, dataLost []int) (dpTmp, gen matrix, err error) {
-	e := genEncMatrixCauchy(data, parity)
-	decodeM := newMatrix(data, data)
-	numDL := len(dataLost)
-	dpTmp = newMatrix(data+numDL, size)
-	for i := 0; i < data; i++ {
-		h := have[i]
-		dpTmp[i] = shards[h]
-		decodeM[i] = e[h]
-	}
-	for i, l := range dataLost {
-		shards[l] = make([]byte, size)
-		dpTmp[i+data] = shards[l]
-	}
-	decodeM, err = decodeM.invert()
-	if err != nil {
-		return
-	}
-	gen = newMatrix(numDL, data)
-	for i, l := range dataLost {
-		gen[i] = decodeM[l]
-	}
-	return
-}
+
