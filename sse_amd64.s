@@ -78,8 +78,8 @@ loop:
 
 	ADDQ $32, in_addr
 	ADDQ $32, out_addr
-	SUBQ $1, CX
-	JNZ  loop
+	SUBQ $1, len
+	JG  loop
 	VZEROUPPER
 	RET
 
@@ -132,8 +132,8 @@ loop:
 
 	ADDQ $32, in_addr
 	ADDQ $32, out_addr
-	SUBQ $1, CX
-	JNZ  loop
+	SUBQ $1, len
+	JG  loop
 	VZEROUPPER
 	RET
 
@@ -166,8 +166,8 @@ loop:
 	MOVOU  xtmp2, (out_addr)
 	ADDQ $16, in_addr
 	ADDQ $16, out_addr
-	SUBQ $1, CX
-	JNZ  loop
+	SUBQ $1, len
+	JG  loop
 	VZEROUPPER
 	RET
 
@@ -201,8 +201,8 @@ loop:
 	MOVOU  xtmp2, (out_addr)
 	ADDQ $16, in_addr
 	ADDQ $16, out_addr
-	SUBQ $1, CX
-	JNZ  loop
+	SUBQ $1, len
+	JG  loop
 	VZEROUPPER
 	RET
 

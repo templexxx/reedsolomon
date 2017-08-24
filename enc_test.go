@@ -13,11 +13,10 @@ const (
 	testNumOut = 4
 )
 
-// test if lookup Tables work
-func TestVerifyBaseEncode(t *testing.T) {
+func TestVerifyBaseEncodeCauchy(t *testing.T) {
 	d := 5
 	p := 5
-	shards := [][]byte{
+	vects := [][]byte{
 		{0, 1},
 		{4, 5},
 		{2, 3},
@@ -29,205 +28,265 @@ func TestVerifyBaseEncode(t *testing.T) {
 		{0, 0},
 		{0, 0},
 	}
-	gen := genCauchyMatrix(d, p)
-	r := &encBase{gen: gen, data: d, parity: p}
-	r.Encode(shards)
-	if shards[5][0] != 97 || shards[5][1] != 64 {
-		t.Fatal("shard 5 mismatch")
+	em := genEncMatrixCauchy(d, p)
+	g := em[d*d:]
+	e := &encBase{data: d, parity: p, genMatrix: g}
+	err := e.Encode(vects)
+	if err != nil {
+		t.Fatal("rs.VerifyBaseEncodeCauchy: ", err)
 	}
-	if shards[6][0] != 173 || shards[6][1] != 3 {
-		t.Fatal("shard 6 mismatch")
+	if vects[5][0] != 97 || vects[5][1] != 64 {
+		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 5 mismatch")
 	}
-	if shards[7][0] != 218 || shards[7][1] != 14 {
-		t.Fatal("shard 7 mismatch")
+	if vects[6][0] != 173 || vects[6][1] != 3 {
+		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 6 mismatch")
 	}
-	if shards[8][0] != 107 || shards[8][1] != 35 {
-		t.Fatal("shard 8 mismatch")
+	if vects[7][0] != 218 || vects[7][1] != 14 {
+		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 7 mismatch")
 	}
-	if shards[9][0] != 110 || shards[9][1] != 177 {
-		t.Fatal("shard 9 mismatch")
+	if vects[8][0] != 107 || vects[8][1] != 35 {
+		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 8 mismatch")
 	}
-}
-
-// Check avx2
-func TestVerifyAVX2_10x4x9999B(t *testing.T) {
-	if !hasAVX2() {
-		t.Fatal("Verify avx2: there is no avx2")
-	}
-	verifyFastEncode(t, testNumIn, testNumOut, 9999, avx2)
-}
-
-// Check ssse3
-func TestVerifySSSE3_10x4x9999B(t *testing.T) {
-	if !hasSSSE3() {
-		t.Fatal("Verify ssse3: there is no ssse3")
-	}
-	verifyFastEncode(t, testNumIn, testNumOut, 9999, ssse3)
-}
-
-// 1KB
-func BenchmarkAVX2Encode10x4x1KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, kb)
-}
-
-func BenchmarkBaseEncode10x4x1KB(b *testing.B) {
-	benchBaseEncode(b, testNumIn, testNumOut, kb)
-}
-
-// 2KB
-func BenchmarkAVX2Encode10x4x2KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 2*kb)
-}
-
-// 4KB
-func BenchmarkAVX2Encode10x4x4KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 4*kb)
-}
-
-// 8KB
-func BenchmarkAVX2Encode10x4x8KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 8*kb)
-}
-
-// 16KB
-func BenchmarkAVX2Encode10x4x16KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 16*kb)
-}
-
-// 32KB
-func BenchmarkAVX2Encode10x4x32KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 32*kb)
-}
-
-// 64KB
-func BenchmarkAVX2Encode10x4x64KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 64*kb)
-}
-
-// 128KB
-func BenchmarkAVX2Encode10x4x128KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 128*kb)
-}
-
-func BenchmarkBaseEncode10x4x128KB(b *testing.B) {
-	benchBaseEncode(b, testNumIn, testNumOut, 128*kb)
-}
-
-// 256KB
-func BenchmarkAVX2Encode10x4x256KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 256*kb)
-}
-
-// 512KB
-func BenchmarkAVX2Encode10x4x512KB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 512*kb)
-}
-
-// 1MB
-func BenchmarkAVX2Encode10x4x1MB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, mb)
-}
-
-// 2MB
-func BenchmarkAVX2Encode10x4x2MB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 2*mb)
-}
-
-// 4MB
-func BenchmarkAVX2Encode10x4x4MB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 4*mb)
-}
-
-// 8MB
-func BenchmarkAVX2Encode10x4x8MB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 8*mb)
-}
-
-// 16MB
-func BenchmarkAVX2Encode10x4x16MB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 16*mb)
-}
-
-func BenchmarkBaseEncode10x4x16MB(b *testing.B) {
-	benchBaseEncode(b, testNumIn, testNumOut, 16*mb)
-}
-
-// 32MB
-func BenchmarkAVX2Encode10x4x32MB(b *testing.B) {
-	benchAVX2Encode(b, testNumIn, testNumOut, 32*mb)
-}
-
-func benchAVX2Encode(b *testing.B, d, p, size int) {
-	gen := genCauchyMatrix(d, p)
-	dp := newMatrix(d+p, size)
-	for i := 0; i < d; i++ {
-		rand.Seed(int64(i))
-		fillRandom(dp[i])
-	}
-	e := &encAVX2{gen: gen, data: d, parity: p}
-	b.SetBytes(int64(d * size))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err := e.Encode(dp)
-		if err != nil {
-			b.Fatal(err)
-		}
+	if vects[9][0] != 110 || vects[9][1] != 177 {
+		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 9 mismatch")
 	}
 }
 
-func benchBaseEncode(b *testing.B, d, p, size int) {
-	gen := genCauchyMatrix(d, p)
-	dp := newMatrix(d+p, size)
-	for i := 0; i < d; i++ {
-		rand.Seed(int64(i))
-		fillRandom(dp[i])
+func TestVerifyBaseEncodeVand(t *testing.T) {
+	d := 5
+	p := 5
+	vects := [][]byte{
+		{0, 1},
+		{4, 5},
+		{2, 3},
+		{6, 7},
+		{8, 9},
+		{0, 0},
+		{0, 0},
+		{0, 0},
+		{0, 0},
+		{0, 0},
 	}
-	e := &encBase{gen: gen, data: d, parity: p}
-	b.SetBytes(int64(d * size))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err := e.Encode(dp)
-		if err != nil {
-			b.Fatal(err)
-		}
+	em, err := genEncMatrixVand(d, p)
+	if err != nil {
+		t.Fatal("rs.VerifyBaseEncodeVand: ", err)
 	}
-}
-
-func verifyFastEncode(t *testing.T, d, p, size, ins int) {
-	gen := genCauchyMatrix(d, p)
-	dp := newMatrix(d+p, size)
-	for i := 0; i < d; i++ {
-		rand.Seed(int64(i))
-		fillRandom(dp[i])
+	g := em[d*d:]
+	e := &encBase{data: d, parity: p, genMatrix: g}
+	err = e.Encode(vects)
+	if err != nil {
+		t.Fatal("rs.VerifyBaseEncodeVand: ", err)
 	}
-	var e EncodeReconster
-	switch ins {
-	case avx2:
-		e = &encAVX2{data: d, parity: p, gen: gen}
-	case ssse3:
-		e = &encSSSE3{data: d, parity: p, gen: gen}
+	if vects[5][0] != 12 || vects[5][1] != 13 {
+		t.Fatal("rs.VerifyBaseEncodeVand: vect 5 mismatch")
 	}
-	e.Encode(dp)
-	// mulTable
-	bDP := newMatrix(d+p, size)
-	for i := 0; i < d; i++ {
-		copy(bDP[i], dp[i])
+	if vects[6][0] != 10 || vects[6][1] != 11 {
+		t.Fatal("rs.VerifyBaseEncodeVand: vect 6 mismatch")
 	}
-	e2 := &encBase{data: d, parity: p, gen: gen}
-	e2.Encode(bDP)
-	for i, asm := range dp {
-		if !bytes.Equal(asm, bDP[i]) {
-			t.Fatal("verify failed, no match base version; shards: ", i)
-		}
+	if vects[7][0] != 14 || vects[7][1] != 15 {
+		t.Fatal("rs.VerifyBaseEncodeVand: vect 7 mismatch")
+	}
+	if vects[8][0] != 90 || vects[8][1] != 91 {
+		t.Fatal("rs.VerifyBaseEncodeVand: vect 8 mismatch")
+	}
+	if vects[9][0] != 94 || vects[9][1] != 95 {
+		t.Fatal("rs.VerifyBaseEncodeVand: shard 9 mismatch")
 	}
 }
 
-func fillRandom(p []byte) {
-	for i := 0; i < len(p); i += 7 {
+func TestVerifyMakeTbl(t *testing.T) {
+	g := []byte{17, 34, 23, 211}
+	expect := make([]byte, 4*32)
+	copy(expect[:32], lowhighTbl[17][:])
+	copy(expect[32:64], lowhighTbl[23][:])
+	copy(expect[64:96], lowhighTbl[34][:])
+	copy(expect[96:128], lowhighTbl[211][:])
+	tbl := makeTbl(g, 2, 2)
+	if !bytes.Equal(expect, tbl) {
+		t.Fatal("rs.VerifyMakeTbl: no match")
+	}
+}
+
+func fillRandom(v []byte) {
+	for i := 0; i < len(v); i += 7 {
 		val := rand.Int63()
-		for j := 0; i+j < len(p) && j < 7; j++ {
-			p[i+j] = byte(val)
+		for j := 0; i+j < len(v) && j < 7; j++ {
+			v[i+j] = byte(val)
 			val >>= 8
 		}
 	}
+}
+
+const verifySize = 128 + 32 + 7
+
+func verifySIMDEnc(t *testing.T, d, p, ins int) {
+	for i := 1; i <= verifySize; i++ {
+		vects1 := make([][]byte, testNumIn+testNumOut)
+		vects2 := make([][]byte, testNumIn+testNumOut)
+		for j := 0; j < testNumIn+testNumOut; j++ {
+			vects1[j] = make([]byte, i)
+			vects2[j] = make([]byte, i)
+		}
+		for j := 0; j < testNumIn; j++ {
+			rand.Seed(int64(j))
+			fillRandom(vects1[j])
+			copy(vects2[j], vects1[j])
+		}
+		em, err := genEncMatrixVand(testNumIn, testNumOut)
+		if err != nil {
+			t.Fatal("rs.verifySIMDEnc: ", err)
+		}
+		g := em[testNumIn*testNumIn:]
+		tbl := makeTbl(g, testNumOut, testNumIn)
+		var e EncodeReconster
+		switch ins {
+		case avx2:
+			e = &encAVX2{data: d, parity: p, genMatrix: g, tbl: tbl}
+		case ssse3:
+			e = &encSSSE3{data: d, parity: p, genMatrix: g, tbl: tbl}
+		}
+		err = e.Encode(vects1)
+		if err != nil {
+			t.Fatal("rs.verifySIMDEnc: ", err)
+		}
+		eb := &encBase{data: d, parity: p, genMatrix: g}
+		err = eb.Encode(vects2)
+		if err != nil {
+			t.Fatal("rs.verifySIMDEnc: ", err)
+		}
+		for k, v1 := range vects1 {
+			if !bytes.Equal(v1, vects2[k]) {
+				var ext string
+				switch ins {
+				case avx2:
+					ext = "avx2"
+				case ssse3:
+					ext = "ssse3"
+				}
+				t.Fatalf("rs.verifySIMDEnc: %s no match base enc; vect: %d; size: %d", ext, k, i)
+			}
+		}
+	}
+}
+
+func TestVerifyAVX2(t *testing.T) {
+	if !hasAVX2() {
+		t.Fatal("rs.TestVerifyAVX2: no AVX2")
+	}
+	verifySIMDEnc(t, testNumIn, testNumOut, avx2)
+}
+
+func TestVerifySSSE3(t *testing.T) {
+	if !hasAVX2() {
+		t.Fatal("rs.TestVerifyAVX2: no SSSE3")
+	}
+	verifySIMDEnc(t, testNumIn, testNumOut, ssse3)
+}
+
+func benchEnc(b *testing.B, d, p, size int) {
+	vects := make([][]byte, d+p)
+	for j := 0; j < d+p; j++ {
+		vects[j] = make([]byte, size)
+	}
+	for j := 0; j < d; j++ {
+		rand.Seed(int64(j))
+		fillRandom(vects[j])
+	}
+	e, err := New(d, p)
+	if err != nil {
+		b.Fatal("rs.benchEnc: ", err)
+	}
+	err = e.Encode(vects)
+	if err != nil {
+		b.Fatal("rs.benchEnc: ", err)
+	}
+	b.SetBytes(int64(d * size))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = e.Encode(vects)
+		if err != nil {
+			b.Fatal("rs.benchEnc: ", err)
+		}
+	}
+}
+
+func BenchmarkEnc10x4_1KB(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, kb)
+}
+
+func BenchmarkEnc10x4_1400B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1400)
+}
+
+func BenchmarkEnc10x4_4KB(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 4*kb)
+}
+
+func BenchmarkEnc10x4_16KB(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 16*kb)
+}
+
+func BenchmarkEnc10x4_64KB(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 64*kb)
+}
+
+func BenchmarkEnc10x4_256KB(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 256*kb)
+}
+
+func BenchmarkEnc10x4_1M(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, mb)
+}
+
+func BenchmarkEnc10x4_4M(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 4*mb)
+}
+
+func BenchmarkEnc10x4_16M(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 16*mb)
+}
+
+func benchEncBase(b *testing.B, d, p, size int) {
+	vects := make([][]byte, d+p)
+	for j := 0; j < d+p; j++ {
+		vects[j] = make([]byte, size)
+	}
+	for j := 0; j < d; j++ {
+		rand.Seed(int64(j))
+		fillRandom(vects[j])
+	}
+	em, err := genEncMatrixVand(d, p)
+	if err != nil {
+		b.Fatal("rs.benchEncBase: ", err)
+	}
+	g := em[d*d:]
+	e := &encBase{data: d, parity: p, genMatrix: g}
+	err = e.Encode(vects)
+	if err != nil {
+		b.Fatal("rs.benchEncBase: ", err)
+	}
+	b.SetBytes(int64(d * size))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = e.Encode(vects)
+		if err != nil {
+			b.Fatal("rs.benchEncBase: ", err)
+		}
+	}
+}
+
+func BenchmarkEncBase10x4_1KB(b *testing.B) {
+	benchEncBase(b, testNumIn, testNumOut, kb)
+}
+
+func BenchmarkEncBase10x4_1400B(b *testing.B) {
+	benchEncBase(b, testNumIn, testNumOut, 1400)
+}
+
+func BenchmarkEncBase10x4_256KB(b *testing.B) {
+	benchEncBase(b, testNumIn, testNumOut, 256*kb)
+}
+
+func BenchmarkEncBase10x4_16M(b *testing.B) {
+	benchEncBase(b, testNumIn, testNumOut, 16*mb)
 }

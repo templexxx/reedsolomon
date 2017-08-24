@@ -2,30 +2,43 @@ package reedsolomon
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 )
 
 func TestEncMatrixVand(t *testing.T) {
-	a, err := genEncMatrixVand(10, 4)
+	a, err := genEncMatrixVand(4, 4)
 	if err != nil {
-		t.Fatal("gen EncMatrixVand fault")
+		t.Fatal("rs.TestEncMatrixVand: ", err)
 	}
-	e := []byte{}
+	e := []byte{1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1,
+		27, 28, 18, 20,
+		28, 27, 20, 18,
+		18, 20, 27, 28,
+		20, 18, 28, 27}
 	if !bytes.Equal(a, e) {
-		t.Fatal("gen EncMatrixVand fault")
+		t.Fatal("rs.TestEncMatrixVand: not match")
 	}
 }
 
 func TestEncMatrixCauchy(t *testing.T) {
-	a := genEncMatrixCauchy(10, 4)
-	e := []byte{}
+	a := genEncMatrixCauchy(4, 4)
+	e := []byte{1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1,
+		71, 167, 122, 186,
+		167, 71, 186, 122,
+		122, 186, 71, 167,
+		186, 122, 167, 71}
 	if !bytes.Equal(a, e) {
-		t.Fatal("gen EncMatrixCauchy fault")
+		t.Fatal("rs.TestEncMatrixCauchy: not match")
 	}
 }
 
-func TestMatrixInverse(t *testing.T) {
+func TestMatrixInvert(t *testing.T) {
 	testCases := []struct {
 		matrixData  []byte
 		cols        int
@@ -34,32 +47,49 @@ func TestMatrixInverse(t *testing.T) {
 		expectedErr error
 	}{
 		{
-			[]byte{56, 23, 98, 3, 100, 200, 45, 201, 123},
+			[]byte{56, 23, 98,
+				3, 100, 200,
+				45, 201, 123},
 			3,
-			[]byte{175, 133, 33, 130, 13, 245, 112, 35, 126},
+			[]byte{175, 133, 33,
+				130, 13, 245,
+				112, 35, 126},
 			true,
 			nil,
 		},
 		{
-			[]byte{0, 23, 98, 3, 100, 200, 45, 201, 123},
+			[]byte{0, 23, 98,
+				3, 100, 200,
+				45, 201, 123},
 			3,
-			[]byte{245, 128, 152, 188, 64, 135, 231, 81, 239},
+			[]byte{245, 128, 152,
+				188, 64, 135,
+				231, 81, 239},
 			true,
 			nil,
 		},
 		{
-			[]byte{1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 7, 7, 6, 6, 1},
+			[]byte{1, 0, 0, 0, 0,
+				0, 1, 0, 0, 0,
+				0, 0, 0, 1, 0,
+				0, 0, 0, 0, 1,
+				7, 7, 6, 6, 1},
 			5,
-			[]byte{1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 123, 123, 1, 122, 122, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0},
+			[]byte{1, 0, 0, 0, 0,
+				0, 1, 0, 0, 0,
+				123, 123, 1, 122, 122,
+				0, 0, 1, 0, 0,
+				0, 0, 0, 1, 0},
 			true,
 			nil,
 		},
 		{
-			[]byte{4, 2, 12, 6},
+			[]byte{4, 2,
+				12, 6},
 			2,
 			nil,
 			false,
-			errors.New("rs.invert: matrix is singular"),
+			errSingular,
 		},
 	}
 
@@ -67,20 +97,33 @@ func TestMatrixInverse(t *testing.T) {
 		m := matrix(c.matrixData)
 		actual, actualErr := m.invert(c.cols)
 		if actualErr != nil && c.ok {
-			t.Errorf("Test %e: Expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
+			t.Errorf("rs.TestMatrixInvert: case.%d, expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
 		}
 		if actualErr == nil && !c.ok {
-			t.Errorf("Test %e: Expected to fail with <ERROR> \"%s\", but passed instead.", i+1, c.expectedErr)
+			t.Errorf("rs.TestMatrixInvert: case.%d, expected to fail with <ERROR> \"%s\", but passed", i+1, c.expectedErr)
 		}
 		if actualErr != nil && !c.ok {
 			if c.expectedErr != actualErr {
-				t.Errorf("Test %e: Expected to fail with error \"%s\", but instead failed with error \"%s\" instead.", i+1, c.expectedErr, actualErr)
+				t.Errorf("rs.TestMatrixInvert: case.%d, expected to fail with error \"%s\", but instead failed with error \"%s\"", i+1, c.expectedErr, actualErr)
 			}
 		}
 		if actualErr == nil && c.ok {
 			if !bytes.Equal(c.expect, actual) {
-				t.Errorf("Test %e: The mc matrix doesnt't match the expected result", i+1)
+				t.Errorf("rs.TestMatrixInvert: case.%d, not match", i+1)
 			}
+		}
+	}
+}
+
+func benchmarkInvert(b *testing.B, size int) {
+	m := genEncMatrixCauchy(size, 2)
+	m.swap(0, size, size)
+	m.swap(1, size+1, size)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := matrix(m[:size*size]).invert(size)
+		if err != nil {
+			b.Fatal("rs.benchmarkInvert: ", err)
 		}
 	}
 }
@@ -95,17 +138,4 @@ func BenchmarkInvert10x10(b *testing.B) {
 
 func BenchmarkInvert20x20(b *testing.B) {
 	benchmarkInvert(b, 20)
-}
-
-func benchmarkInvert(b *testing.B, size int) {
-	m := genEncMatrixCauchy(size, 2)
-	m.swap(0, size, size)
-	m.swap(1, size+1, size)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := matrix(m[:size*size]).invert(size)
-		if err != nil {
-			b.Fatal(b)
-		}
-	}
 }

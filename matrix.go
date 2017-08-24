@@ -33,7 +33,7 @@ func genVandMatrix(rows, cols int) matrix {
 	m := newMatrix(rows, cols)
 	for i := 0; i < rows; i++ {
 		for j := 0; j < cols; j++ {
-			m[i*rows+j] = gfExp(byte(i), j)
+			m[i*cols+j] = gfExp(byte(i), j)
 		}
 	}
 	return m
@@ -98,6 +98,8 @@ func (m matrix) invert(n int) (matrix, error) {
 	return raw.subMatrix(n), nil
 }
 
+var errSingular error = errors.New("rs.invert: matrix is singular")
+
 func (m matrix) gaussJordan(rows, columns int) error {
 	for r := 0; r < rows; r++ {
 		if m[2*r*rows+r] == 0 {
@@ -109,7 +111,7 @@ func (m matrix) gaussJordan(rows, columns int) error {
 			}
 		}
 		if m[2*r*rows+r] == 0 {
-			return errors.New("rs.invert: matrix is singular")
+			return errSingular
 		}
 		if m[2*r*rows+r] != 1 {
 			d := m[2*r*rows+r]

@@ -5,7 +5,7 @@
 #define low_tbl Y0
 #define high_tbl Y1
 #define in_addr  BX
-#define out_addr SI
+#define out_addr R9
 #define len DI
 #define mask Y2
 
@@ -31,7 +31,7 @@ TEXT ·vectMulAVX2(SB), NOSPLIT, $0
 	MOVQ         out+48(FP), out_addr
 	MOVB         $0x0f, DX
 	LONG         $0x2069e3c4; WORD $0x00d2   // VPINSRB $0x00, EDX, XMM2, XMM2
-	VPBROADCASTB X2, mask0
+	VPBROADCASTB X2, mask
 	MOVQ         in_len+32(FP), len
 	SHRQ         $7, len
 
@@ -79,8 +79,8 @@ loop:
 	// TODO maybe I can use a POS instead of it
 	ADDQ $128, in_addr
 	ADDQ $128, out_addr
-	SUBQ $1, CX
-	JNZ  loop
+	SUBQ $1, len
+	JG  loop
 	RET
 
 // func vectMulPlusAVX2(tbl, inV, outV []byte)
@@ -94,7 +94,7 @@ TEXT ·vectMulPlusAVX2(SB), NOSPLIT, $0
 	MOVQ         out+48(FP), out_addr
 	MOVB         $0x0f, DX
 	LONG         $0x2069e3c4; WORD $0x00d2   // VPINSRB $0x00, EDX, XMM2, XMM2
-	VPBROADCASTB X2, mask0
+	VPBROADCASTB X2, mask
 	MOVQ         in_len+32(FP), len
 	SHRQ         $7, len
 
@@ -144,8 +144,8 @@ loop:
 
 	ADDQ $128, in_addr
 	ADDQ $128, out_addr
-	SUBQ $1, CX
-	JNZ  loop
+	SUBQ $1, len
+	JG  loop
 	RET
 
 // func vectMulAVX2_32B(tbl, inV, outV []byte)
@@ -159,7 +159,7 @@ TEXT ·vectMulAVX2_32B(SB), NOSPLIT, $0
 	MOVQ         out+48(FP), out_addr
 	MOVB         $0x0f, DX
 	LONG         $0x2069e3c4; WORD $0x00d2   // VPINSRB $0x00, EDX, XMM2, XMM2
-	VPBROADCASTB X2, mask0
+	VPBROADCASTB X2, mask
 	MOVQ         in_len+32(FP), len
 	SHRQ         $5, len
 
@@ -174,8 +174,8 @@ loop:
 	VMOVDQU in0, (out_addr)
 	ADDQ $32, in_addr
 	ADDQ $32, out_addr
-	SUBQ $1, CX
-	JNZ  loop
+	SUBQ $1, len
+	JG  loop
 	RET
 
 // func vectMulPlusAVX2_32B(tbl, inV, outV []byte)
@@ -189,7 +189,7 @@ TEXT ·vectMulPlusAVX2_32B(SB), NOSPLIT, $0
 	MOVQ         out+48(FP), out_addr
 	MOVB         $0x0f, DX
 	LONG         $0x2069e3c4; WORD $0x00d2   // VPINSRB $0x00, EDX, XMM2, XMM2
-	VPBROADCASTB X2, mask0
+	VPBROADCASTB X2, mask
 	MOVQ         in_len+32(FP), len
 	SHRQ         $5, len
 
@@ -205,8 +205,8 @@ loop:
 	VMOVDQU in0, (out_addr)
 	ADDQ $32, in_addr
 	ADDQ $32, out_addr
-	SUBQ $1, CX
-	JNZ  loop
+	SUBQ $1, len
+	JG  loop
 	RET
 
 TEXT ·hasAVX2(SB), NOSPLIT, $0

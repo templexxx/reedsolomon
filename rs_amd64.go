@@ -9,7 +9,6 @@ func init() {
 	getEXT()
 }
 
-// get CPU Instruction Extensions
 func getEXT() {
 	if hasAVX2() {
 		extension = avx2
@@ -47,17 +46,16 @@ func cacheInverse(data, parity int) bool {
 	return false
 }
 
-// make generator_matrix's low&high tbl
 func makeTbl(gen matrix, rows, cols int) []byte {
 	tbl := make([]byte, 32*len(gen))
 	off := 0
 	for i := 0; i < cols; i++ {
 		for j := 0; j < rows; j++ {
-			c := gen[j*rows+i]
-			tbl := lowhighTbl[c][:]
-			copy32B(tbl[off:off+32], tbl)
+			c := gen[j*cols+i]
+			t := lowhighTbl[c][:]
+			copy32B(tbl[off:off+32], t)
+			off += 32
 		}
-		off += 32
 	}
 	return tbl
 }
@@ -187,9 +185,9 @@ func (e *encAVX2) matrixMulRemain(start, end int, inVS, outVS [][]byte) {
 		for i := 0; i < in; i++ {
 			for j := 0; j < out; j++ {
 				if i == 0 {
-					vectMul(gen[j*out+i], inVS[i][start:end], outVS[j][start:end])
+					vectMul(gen[j*in+i], inVS[i][start:end], outVS[j][start:end])
 				} else {
-					vectMulPlus(gen[j*out+i], inVS[i][start:end], outVS[j][start:end])
+					vectMulPlus(gen[j*in+i], inVS[i][start:end], outVS[j][start:end])
 				}
 			}
 		}
@@ -280,7 +278,7 @@ func (e *encSSSE3) matrixMul16B(start, end int, inVS, outVS [][]byte) {
 
 func (e *encSSSE3) matrixMulRemain(start, end int, inVS, outVS [][]byte) {
 	undone := end - start
-	if undone >= 32 {
+	if undone >= 16 {
 		e.matrixMul16B(start, end, inVS, outVS)
 	}
 	done := (undone >> 4) << 4
@@ -293,9 +291,9 @@ func (e *encSSSE3) matrixMulRemain(start, end int, inVS, outVS [][]byte) {
 		for i := 0; i < in; i++ {
 			for j := 0; j < out; j++ {
 				if i == 0 {
-					vectMul(gen[j*out+i], inVS[i][start:end], outVS[j][start:end])
+					vectMul(gen[j*in+i], inVS[i][start:end], outVS[j][start:end])
 				} else {
-					vectMulPlus(gen[j*out+i], inVS[i][start:end], outVS[j][start:end])
+					vectMulPlus(gen[j*in+i], inVS[i][start:end], outVS[j][start:end])
 				}
 			}
 		}
