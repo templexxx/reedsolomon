@@ -1,8 +1,0 @@
-package reedsolomon
-
-import "errors"
-
-
-
-
-

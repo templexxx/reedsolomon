@@ -138,6 +138,7 @@ func vectMulPlus(c byte, inV, outV []byte) {
 }
 
 // Reconstruct : reconstruct lost data & parity
+// set shard nil if lost
 func (e *encBase) Reconstruct(vects [][]byte) (err error) {
 	return e.reconst(vects, false)
 }
@@ -219,6 +220,18 @@ func makeReconstInfo(data int, vects [][]byte, dataOnly bool) (info reconstInfo,
 	return
 }
 
+func makeInverse(em matrix, has []int, data int) (matrix, error) {
+	m := newMatrix(data, data)
+	for i, p := range has {
+		m[i] = em[p]
+	}
+	im, err := m.invert(data)
+	if err != nil {
+		return nil, err
+	}
+	return im, nil
+}
+
 func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
 	data := e.data
 	parity := e.parity
@@ -234,18 +247,14 @@ func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
 	}
 	em := e.encodeMatrix
 	if !info.dataOK {
-		dm := newMatrix(data, data)
-		for i, p := range info.has {
-			dm[i] = em[p]
-		}
-		dgm, err := dm.invert(data)
-		if err != nil {
-			return
+		im, err2 := makeInverse(em, info.has, data)
+		if err2 != nil {
+			return err2
 		}
 		dataLost := info.data
 		rgData := make([]byte, len(dataLost)*data)
 		for i, p := range dataLost {
-			copy(rgData[i*data:i*data+data], dgm[p*data:p*data+data])
+			copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
 		}
 		e.reconstData(vects, info.vectSize, dataLost, rgData)
 	}

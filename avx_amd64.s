@@ -20,7 +20,7 @@
 
 #define tmp0 R8
 
-// func vectMulAVX2(tbl, in, out []byte)
+// func vectMulAVX2(tbl, inV, outV []byte)
 TEXT ·vectMulAVX2(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), X0
@@ -83,7 +83,7 @@ loop:
 	JNZ  loop
 	RET
 
-// func vectMulPlusAVX2(tbl, in, out []byte)
+// func vectMulPlusAVX2(tbl, inV, outV []byte)
 TEXT ·vectMulPlusAVX2(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), X0
@@ -148,8 +148,8 @@ loop:
 	JNZ  loop
 	RET
 
-// func vectMulAVX2Loop32(tbl, in, out []byte)
-TEXT ·vectMulAVX2Loop32(SB), NOSPLIT, $0
+// func vectMulAVX2_32B(tbl, inV, outV []byte)
+TEXT ·vectMulAVX2_32B(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), X0
 	VMOVDQU      16(tmp0), X1
@@ -178,8 +178,8 @@ loop:
 	JNZ  loop
 	RET
 
-// func vectMulPlusAVX2Loop32(tbl, in, out []byte)
-TEXT ·vectMulPlusAVX2Loop32(SB), NOSPLIT, $0
+// func vectMulPlusAVX2_32B(tbl, inV, outV []byte)
+TEXT ·vectMulPlusAVX2_32B(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), X0
 	VMOVDQU      16(tmp0), X1

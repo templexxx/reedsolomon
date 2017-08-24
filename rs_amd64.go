@@ -27,23 +27,21 @@ func hasAVX2() bool
 //go:noescape
 func hasSSSE3() bool
 
-// limitShardsMC : data+parity must < limitShardsMC for having inverse matrix cache
+// limitVectMC : data+parity must < limitVectMC for having inverse matrix cache
 // there is at most 38760 inverse matrix (data: 14, parity: 6, calculated by mathtool/cntinverse)
 const (
-	limitShardsMC = 33
-	limitParityMC = 5
-)
-const (
-	limitSmallShardsMC = 21
+	limitVectMC        = 33
+	limitParityMC      = 5
+	limitSmallVectMC   = 21
 	limitSmallParityMC = 7
 )
 
 func cacheInverse(data, parity int) bool {
-	shards := data + parity
-	if shards < limitSmallShardsMC && parity < limitSmallParityMC {
+	vects := data + parity
+	if vects < limitSmallVectMC && parity < limitSmallParityMC {
 		return true
 	}
-	if shards < limitShardsMC && parity < limitParityMC {
+	if vects < limitVectMC && parity < limitParityMC {
 		return true
 	}
 	return false
@@ -72,7 +70,7 @@ func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
 	if extension == none {
 		return &encBase{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen}
 	}
-	c := make(map[uint64]matrix)
+	c := make(map[uint32]matrix)
 	t := makeTbl(gen, parity, data)
 	if extension == avx2 {
 		if cacheInverse(data, parity) {
@@ -92,6 +90,17 @@ func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
 // size of sub-vector
 const unitSize int = 16 * 1024
 
+func makeAVX2Do(size int) int {
+	if size < unitSize {
+		c := size / 128
+		if c == 0 {
+			return unitSize
+		}
+		return c * 128
+	}
+	return unitSize
+}
+
 func (e *encAVX2) Encode(vects [][]byte) (err error) {
 	err = checkEncVects(e.data, e.parity, vects)
 	if err != nil {
@@ -101,7 +110,7 @@ func (e *encAVX2) Encode(vects [][]byte) (err error) {
 	outVS := vects[e.data:]
 	size := len(inVS[0])
 	start, end := 0, 0
-	do := unitSize
+	do := makeAVX2Do(size)
 	for start < size {
 		end = start + do
 		if end <= size {
@@ -187,6 +196,17 @@ func (e *encAVX2) matrixMulRemain(start, end int, inVS, outVS [][]byte) {
 	}
 }
 
+func makeSSSE3Do(size int) int {
+	if size < unitSize {
+		c := size / 32
+		if c == 0 {
+			return unitSize
+		}
+		return c * 32
+	}
+	return unitSize
+}
+
 func (e *encSSSE3) Encode(vects [][]byte) (err error) {
 	err = checkEncVects(e.data, e.parity, vects)
 	if err != nil {
@@ -196,7 +216,7 @@ func (e *encSSSE3) Encode(vects [][]byte) (err error) {
 	outVS := vects[e.data:]
 	size := len(inVS[0])
 	start, end := 0, 0
-	do := unitSize
+	do := makeSSSE3Do(size)
 	for start < size {
 		end = start + do
 		if end <= size {
@@ -282,7 +302,6 @@ func (e *encSSSE3) matrixMulRemain(start, end int, inVS, outVS [][]byte) {
 	}
 }
 
-// set shard nil if lost
 func (e *encAVX2) Reconstruct(vects [][]byte) (err error) {
 	return e.reconst(vects, false)
 }
@@ -293,27 +312,29 @@ func (e *encAVX2) ReconstructData(vects [][]byte) (err error) {
 
 func (e *encAVX2) getInverseCache(has []int) (matrix, error) {
 	data := e.data
-	parity := e.parity
 	em := e.encodeMatrix
 	if !e.enableInverseCache {
 		return makeInverse(em, has, data)
 	}
-	cnt := 0
-	for i := 0; i < data+parity; i++ {
-		if 
+	var key uint32
+	for _, h := range has {
+		key += 1 << uint8(h)
 	}
-}
-
-func makeInverse(em matrix, has []int, data int) (matrix, error) {
-	dm := newMatrix(data, data)
-	for i, p := range has {
-		dm[i] = em[p]
+	e.inverseCache.RLock()
+	m, ok := e.inverseCache.cache[key]
+	if ok {
+		e.inverseCache.RUnlock()
+		return m, nil
 	}
-	dgm, err := dm.invert(data)
+	e.inverseCache.RUnlock()
+	m, err := makeInverse(em, has, data)
 	if err != nil {
-		return dgm, err
+		return nil, err
 	}
-	return dgm, nil
+	e.inverseCache.Lock()
+	e.inverseCache.cache[key] = m
+	e.inverseCache.Unlock()
+	return m, nil
 }
 
 func (e *encAVX2) reconst(vects [][]byte, dataOnly bool) (err error) {
@@ -331,21 +352,14 @@ func (e *encAVX2) reconst(vects [][]byte, dataOnly bool) (err error) {
 	}
 	em := e.encodeMatrix
 	if !info.dataOK {
-		dm := newMatrix(data, data)
-		for i, p := range info.has {
-			dm[i] = em[p]
-		}
-		if e.enableInverseCache {
-
-		}
-		dgm, err := dm.invert(data)
-		if err != nil {
-			return
+		im, err2 := e.getInverseCache(info.has)
+		if err2 != nil {
+			return err2
 		}
 		dataLost := info.data
 		rgData := make([]byte, len(dataLost)*data)
 		for i, p := range dataLost {
-			copy(rgData[i*data:i*data+data], dgm[p*data:p*data+data])
+			copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
 		}
 		e.reconstData(vects, info.vectSize, dataLost, rgData)
 	}
@@ -358,109 +372,150 @@ func (e *encAVX2) reconst(vects [][]byte, dataOnly bool) (err error) {
 		e.reconstParity(vects, info.vectSize, parityLost, rgParity)
 	}
 	return nil
-	stat, err := getReconstInfo(e.data, e.parity, vects, dataOnly)
-	if err != nil {
-		if err == ErrNoNeedRepair {
-			return nil
+}
+
+func (e *encAVX2) reconstData(vects [][]byte, size int, lost []int, gen matrix) {
+	data := e.data
+	out := len(lost)
+	vtmp := make([][]byte, data+out)
+	cnt := 0
+	for i, v := range vects {
+		if v != nil {
+			if cnt < e.data {
+				vtmp[cnt] = vects[i]
+				cnt++
+			}
 		}
+	}
+	for _, p := range lost {
+		vtmp[cnt] = vects[p]
+		cnt++
+	}
+	t := makeTbl(gen, out, data)
+	etmp := &encAVX2{data: data, parity: out, genMatrix: gen, tbl: t}
+	etmp.Encode(vtmp)
+}
+
+func (e *encAVX2) reconstParity(vects [][]byte, size int, lost []int, gen matrix) {
+	data := e.data
+	out := len(lost)
+	vtmp := make([][]byte, data+out)
+	for i := 0; i < data; i++ {
+		vtmp[i] = vects[i]
+	}
+	for i, p := range lost {
+		vtmp[data+i] = vects[p]
+	}
+	t := makeTbl(gen, out, data)
+	etmp := &encAVX2{data: e.data, parity: out, genMatrix: gen, tbl: t}
+	etmp.Encode(vtmp)
+}
+
+func (e *encSSSE3) Reconstruct(vects [][]byte) (err error) {
+	return e.reconst(vects, false)
+}
+
+func (e *encSSSE3) ReconstructData(vects [][]byte) (err error) {
+	return e.reconst(vects, true)
+}
+
+func (e *encSSSE3) getInverseCache(has []int) (matrix, error) {
+	data := e.data
+	em := e.encodeMatrix
+	if !e.enableInverseCache {
+		return makeInverse(em, has, data)
+	}
+	var key uint32
+	for _, h := range has {
+		key += 1 << uint8(h)
+	}
+	e.inverseCache.RLock()
+	m, ok := e.inverseCache.cache[key]
+	if ok {
+		e.inverseCache.RUnlock()
+		return m, nil
+	}
+	e.inverseCache.RUnlock()
+	m, err := makeInverse(em, has, data)
+	if err != nil {
+		return nil, err
+	}
+	e.inverseCache.Lock()
+	e.inverseCache.cache[key] = m
+	e.inverseCache.Unlock()
+	return m, nil
+}
+
+func (e *encSSSE3) reconst(vects [][]byte, dataOnly bool) (err error) {
+	data := e.data
+	parity := e.parity
+	if data+parity != len(vects) {
+		return errors.New(fmt.Sprintf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects)))
+	}
+	info, err := makeReconstInfo(data, vects, dataOnly)
+	if err != nil {
 		return
 	}
-	if len(stat.dataLost) > 0 {
-		err := e.reconstData(vects, stat.vectSize, stat.have, stat.dataLost)
-		if err != nil {
-			return err
-		}
-	}
-	if len(stat.parityLost) > 0 && !dataOnly {
-		e.reconstParity(vects, stat.vectSize, stat.parityLost)
-	}
-	return nil
-}
-
-func (e *encAVX2) reconstData(shards matrix, size int, have, dataLost []int) error {
-	dpTmp, gen, err := genReconstMatrix(shards, e.data, e.parity, size, have, dataLost)
-	if err != nil {
-		return err
-	}
-	e := &encAVX2{data: e.data, parity: len(dataLost), gen: gen}
-	e.Encode(dpTmp)
-	return nil
-}
-
-func (e *encAVX2) reconstParity(shards matrix, size int, parityLost []int) {
-	genTmp := genCauchyMatrix(e.data, e.parity)
-	numPL := len(parityLost)
-	gen := newMatrix(numPL, e.data)
-	for i, l := range parityLost {
-		gen[i] = genTmp[l-e.data]
-	}
-	dpTmp := newMatrix(e.data+numPL, size)
-	for i := 0; i < e.data; i++ {
-		dpTmp[i] = shards[i]
-	}
-	for i, l := range parityLost {
-		shards[l] = make([]byte, size)
-		dpTmp[i+e.data] = shards[l]
-	}
-	e := &encAVX2{data: e.data, parity: numPL, gen: gen}
-	e.Encode(dpTmp)
-}
-
-func (r *encSSSE3) reconst(shards matrix, dataOnly bool) (err error) {
-	stat, err := getReconstInfo(r.data, r.parity, shards, dataOnly)
-	if err != nil {
-		if err == ErrNoNeedRepair {
-			return nil
-		}
+	if info.dataOK && info.parityOK {
 		return
 	}
-	if len(stat.dataLost) > 0 {
-		err := r.reconstData(shards, stat.vectSize, stat.have, stat.dataLost)
-		if err != nil {
-			return err
+	em := e.encodeMatrix
+	if !info.dataOK {
+		im, err2 := e.getInverseCache(info.has)
+		if err2 != nil {
+			return err2
+		}
+		dataLost := info.data
+		rgData := make([]byte, len(dataLost)*data)
+		for i, p := range dataLost {
+			copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
+		}
+		e.reconstData(vects, info.vectSize, dataLost, rgData)
+	}
+	if !info.parityOK {
+		parityLost := info.parity
+		rgParity := make([]byte, len(parityLost)*data)
+		for i, p := range parityLost {
+			copy(rgParity[i*data:i*data+data], em[data*data+p*data:data*data+p*data+data])
+		}
+		e.reconstParity(vects, info.vectSize, parityLost, rgParity)
+	}
+	return nil
+}
+
+func (e *encSSSE3) reconstData(vects [][]byte, size int, lost []int, gen matrix) {
+	data := e.data
+	out := len(lost)
+	vtmp := make([][]byte, data+out)
+	cnt := 0
+	for i, v := range vects {
+		if v != nil {
+			if cnt < e.data {
+				vtmp[cnt] = vects[i]
+				cnt++
+			}
 		}
 	}
-	if len(stat.parityLost) > 0 && !dataOnly {
-		r.reconstParity(shards, stat.vectSize, stat.parityLost)
+	for _, p := range lost {
+		vtmp[cnt] = vects[p]
+		cnt++
 	}
-	return nil
+	t := makeTbl(gen, out, data)
+	etmp := &encSSSE3{data: data, parity: out, genMatrix: gen, tbl: t}
+	etmp.Encode(vtmp)
 }
 
-func (r *encSSSE3) Reconstruct(shards matrix) (err error) {
-	return r.reconst(shards, false)
-}
-
-func (r *encSSSE3) ReconstructData(shards matrix) (err error) {
-	return r.reconst(shards, true)
-}
-
-////////////// Internal Functions //////////////
-
-func (r *encSSSE3) reconstData(shards matrix, size int, have, dataLost []int) error {
-	dpTmp, gen, err := genReconstMatrix(shards, r.data, r.parity, size, have, dataLost)
-	if err != nil {
-		return err
+func (e *encSSSE3) reconstParity(vects [][]byte, size int, lost []int, gen matrix) {
+	data := e.data
+	out := len(lost)
+	vtmp := make([][]byte, data+out)
+	for i := 0; i < data; i++ {
+		vtmp[i] = vects[i]
 	}
-	e := &encSSSE3{data: r.data, parity: len(dataLost), gen: gen}
-	e.Encode(dpTmp)
-	return nil
-}
-
-func (r *encSSSE3) reconstParity(shards matrix, size int, parityLost []int) {
-	genTmp := genCauchyMatrix(r.data, r.parity)
-	numPL := len(parityLost)
-	gen := newMatrix(numPL, r.data)
-	for i, l := range parityLost {
-		gen[i] = genTmp[l-r.data]
+	for i, p := range lost {
+		vtmp[data+i] = vects[p]
 	}
-	dpTmp := newMatrix(r.data+numPL, size)
-	for i := 0; i < r.data; i++ {
-		dpTmp[i] = shards[i]
-	}
-	for i, l := range parityLost {
-		shards[l] = make([]byte, size)
-		dpTmp[i+r.data] = shards[l]
-	}
-	e := &encSSSE3{data: r.data, parity: numPL, gen: gen}
-	e.Encode(dpTmp)
+	t := makeTbl(gen, out, data)
+	etmp := &encSSSE3{data: e.data, parity: out, genMatrix: gen, tbl: t}
+	etmp.Encode(vtmp)
 }

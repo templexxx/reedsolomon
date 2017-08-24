@@ -20,8 +20,18 @@
 #define xtmp2 X5
 #define xtmp3 X8
 
+// func copy32B(dst, src []byte)
+TEXT ·copy32B(SB), NOSPLIT, $0
+    MOVQ dst+0(FP), AX
+    MOVQ src+24(FP), BX
+    MOVOU (BX), X0
+    MOVOU 16(BX), X1
+    MOVOU X0, (AX)
+    MOVOU X1, 16(AX)
+    VZEROUPPER
+    RET
 
-// func vectMulSSSE3(tbl, in, out []byte)
+// func vectMulSSSE3(tbl, inV, outV []byte)
 TEXT ·vectMulSSSE3(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), low_tbl
@@ -73,7 +83,7 @@ loop:
 	VZEROUPPER
 	RET
 
-// func vectMulPlusSSSE3(tbl, in, out []byte)
+// func vectMulPlusSSSE3(tbl, inV, outV []byte)
 TEXT ·vectMulPlusSSSE3(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), low_tbl
@@ -127,8 +137,8 @@ loop:
 	VZEROUPPER
 	RET
 
-// func vectMulSSSE3Loop16(tbl, in, out []byte)
-TEXT ·vectMulSSSE3Loop16(SB), NOSPLIT, $0
+// func vectMulSSSE3_16B(tbl, inV, outV []byte)
+TEXT ·vectMulSSSE3_16B(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), low_tbl
 	VMOVDQU      16(tmp0), high_tbl
@@ -161,8 +171,8 @@ loop:
 	VZEROUPPER
 	RET
 
-// func vectMulPlusSSSE3Loop16(tbl, in, out []byte)
-TEXT ·vectMulPlusSSSE3Loop16(SB), NOSPLIT, $0
+// func vectMulPlusSSSE3_16B(tbl, inV, outV []byte)
+TEXT ·vectMulPlusSSSE3_16B(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), low_tbl
 	VMOVDQU      16(tmp0), high_tbl

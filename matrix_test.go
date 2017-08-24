@@ -1,135 +1,111 @@
 package reedsolomon
 
 import (
-	"math/rand"
-	"strconv"
-	"strings"
+	"bytes"
+	"errors"
 	"testing"
 )
 
-// TODO : add cauchy and vandermonde matrix testing
-// TODO : add gfMul gfExp testing
+func TestEncMatrixVand(t *testing.T) {
+	a, err := genEncMatrixVand(10, 4)
+	if err != nil {
+		t.Fatal("gen EncMatrixVand fault")
+	}
+	e := []byte{}
+	if !bytes.Equal(a, e) {
+		t.Fatal("gen EncMatrixVand fault")
+	}
+}
+
+func TestEncMatrixCauchy(t *testing.T) {
+	a := genEncMatrixCauchy(10, 4)
+	e := []byte{}
+	if !bytes.Equal(a, e) {
+		t.Fatal("gen EncMatrixCauchy fault")
+	}
+}
 
 func TestMatrixInverse(t *testing.T) {
 	testCases := []struct {
-		matrixData     [][]byte
-		expectedResult string
-		shouldPass     bool
-		expectedErr    error
+		matrixData  []byte
+		cols        int
+		expect      []byte
+		ok          bool
+		expectedErr error
 	}{
-		// Test case validating mc of the input matrix.
 		{
-			// input
-			[][]byte{
-				[]byte{56, 23, 98},
-				[]byte{3, 100, 200},
-				[]byte{45, 201, 123},
-			},
-			// expected
-			"[[175, 133, 33], [130, 13, 245], [112, 35, 126]]",
-			// expected to pass.
+			[]byte{56, 23, 98, 3, 100, 200, 45, 201, 123},
+			3,
+			[]byte{175, 133, 33, 130, 13, 245, 112, 35, 126},
 			true,
 			nil,
 		},
-		// Test case matrix[0][0] == 0
 		{
-			[][]byte{
-				[]byte{0, 23, 98},
-				[]byte{3, 100, 200},
-				[]byte{45, 201, 123},
-			},
-			"[[245, 128, 152], [188, 64, 135], [231, 81, 239]]",
+			[]byte{0, 23, 98, 3, 100, 200, 45, 201, 123},
+			3,
+			[]byte{245, 128, 152, 188, 64, 135, 231, 81, 239},
 			true,
 			nil,
 		},
-		// Test case validating mc of the input matrix.
 		{
-			// input
-			[][]byte{
-				[]byte{1, 0, 0, 0, 0},
-				[]byte{0, 1, 0, 0, 0},
-				[]byte{0, 0, 0, 1, 0},
-				[]byte{0, 0, 0, 0, 1},
-				[]byte{7, 7, 6, 6, 1},
-			},
-			// expected
-			"[[1, 0, 0, 0, 0]," +
-				" [0, 1, 0, 0, 0]," +
-				" [123, 123, 1, 122, 122]," +
-				" [0, 0, 1, 0, 0]," +
-				" [0, 0, 0, 1, 0]]",
+			[]byte{1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 7, 7, 6, 6, 1},
+			5,
+			[]byte{1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 123, 123, 1, 122, 122, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0},
 			true,
 			nil,
 		},
-		// Test case with singular matrix.
-		// expected to fail with error errSingular.
 		{
-
-			[][]byte{
-				[]byte{4, 2},
-				[]byte{12, 6},
-			},
-			"",
+			[]byte{4, 2, 12, 6},
+			2,
+			nil,
 			false,
-			ErrSingular,
+			errors.New("rs.invert: matrix is singular"),
 		},
 	}
 
-	for i, testCase := range testCases {
-		m := newMatrixData(testCase.matrixData)
-		actualResult, actualErr := m.invert()
-		if actualErr != nil && testCase.shouldPass {
+	for i, c := range testCases {
+		m := matrix(c.matrixData)
+		actual, actualErr := m.invert(c.cols)
+		if actualErr != nil && c.ok {
 			t.Errorf("Test %e: Expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
 		}
-		if actualErr == nil && !testCase.shouldPass {
-			t.Errorf("Test %e: Expected to fail with <ERROR> \"%s\", but passed instead.", i+1, testCase.expectedErr)
+		if actualErr == nil && !c.ok {
+			t.Errorf("Test %e: Expected to fail with <ERROR> \"%s\", but passed instead.", i+1, c.expectedErr)
 		}
-		// Failed as expected, but does it fail for the expected reason.
-		if actualErr != nil && !testCase.shouldPass {
-			if testCase.expectedErr != actualErr {
-				t.Errorf("Test %e: Expected to fail with error \"%s\", but instead failed with error \"%s\" instead.", i+1, testCase.expectedErr, actualErr)
+		if actualErr != nil && !c.ok {
+			if c.expectedErr != actualErr {
+				t.Errorf("Test %e: Expected to fail with error \"%s\", but instead failed with error \"%s\" instead.", i+1, c.expectedErr, actualErr)
 			}
 		}
-		// Test passes as expected, but the output values
-		// are verified for correctness here.
-		if actualErr == nil && testCase.shouldPass {
-			if testCase.expectedResult != actualResult.string() {
+		if actualErr == nil && c.ok {
+			if !bytes.Equal(c.expect, actual) {
 				t.Errorf("Test %e: The mc matrix doesnt't match the expected result", i+1)
 			}
 		}
 	}
 }
 
+func BenchmarkInvert5x5(b *testing.B) {
+	benchmarkInvert(b, 5)
+}
+
 func BenchmarkInvert10x10(b *testing.B) {
 	benchmarkInvert(b, 10)
 }
 
+func BenchmarkInvert20x20(b *testing.B) {
+	benchmarkInvert(b, 20)
+}
+
 func benchmarkInvert(b *testing.B, size int) {
-	m := newMatrix(size, size)
-	rand.Seed(0)
-	for i := 0; i < size; i++ {
-		fillRandom(m[i])
-	}
+	m := genEncMatrixCauchy(size, 2)
+	m.swap(0, size, size)
+	m.swap(1, size+1, size)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m.invert()
-	}
-}
-
-// new a matrix with Data
-func newMatrixData(data [][]byte) matrix {
-	m := matrix(data)
-	return m
-}
-
-func (m matrix) string() string {
-	rowOut := make([]string, 0, len(m))
-	for _, row := range m {
-		colOut := make([]string, 0, len(row))
-		for _, col := range row {
-			colOut = append(colOut, strconv.Itoa(int(col)))
+		_, err := matrix(m[:size*size]).invert(size)
+		if err != nil {
+			b.Fatal(b)
 		}
-		rowOut = append(rowOut, "["+strings.Join(colOut, ", ")+"]")
 	}
-	return "[" + strings.Join(rowOut, ", ") + "]"
 }
