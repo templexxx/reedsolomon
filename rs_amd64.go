@@ -3,28 +3,31 @@ package reedsolomon
 import (
 	"errors"
 	"fmt"
+	"sync"
 )
-
-func init() {
-	getEXT()
-}
-
-func getEXT() {
-	if hasAVX2() {
-		extension = avx2
-	} else if hasSSSE3() {
-		extension = ssse3
-	} else {
-		extension = none
-	}
-	return
-}
 
 //go:noescape
 func hasAVX2() bool
 
 //go:noescape
 func hasSSSE3() bool
+
+// SIMD Instruction Extensions
+const (
+	none = iota
+	avx2
+	ssse3
+)
+
+func getEXT() int {
+	if hasAVX2() {
+		return avx2
+	} else if hasSSSE3() {
+		return ssse3
+	} else {
+		return none
+	}
+}
 
 // limitVectMC : data+parity must < limitVectMC for having inverse matrix cache
 // there is at most 38760 inverse matrix (data: 14, parity: 6, calculated by mathtool/cntinverse)
@@ -46,7 +49,10 @@ func cacheInverse(data, parity int) bool {
 	return false
 }
 
-func makeTbl(gen matrix, rows, cols int) []byte {
+//go:noescape
+func copy32B(dst, src []byte) // need SSE2, SSE2 introduced in 2001. So assume all amd64 has sse2
+
+func initTbl(gen matrix, rows, cols int) []byte {
 	tbl := make([]byte, 32*len(gen))
 	off := 0
 	for i := 0; i < cols; i++ {
@@ -60,24 +66,42 @@ func makeTbl(gen matrix, rows, cols int) []byte {
 	return tbl
 }
 
-//go:noescape
-func copy32B(dst, src []byte) // need SSE2, SSE2 introduced in 2001. So assume all amd64 has sse2
+type (
+	encAVX2  encSIMD
+	encSSSE3 encSIMD
+	encSIMD  struct {
+		data               int
+		parity             int
+		encodeMatrix       matrix
+		genMatrix          matrix
+		tbl                []byte //  multiply-tables of element in generator-matrix
+		enableInverseCache bool
+		inverseCache       matrixCache // inverse matrix's cache
+	}
+	matrixCache struct {
+		sync.RWMutex
+		cache map[uint32]matrix
+	}
+)
 
 func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
 	gen := encodeMatrix[data*data:]
-	if extension == none {
+	ext := getEXT()
+	if ext == none {
 		return &encBase{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen}
 	}
-	c := make(map[uint32]matrix)
-	t := makeTbl(gen, parity, data)
-	if extension == avx2 {
-		if cacheInverse(data, parity) {
+	t := initTbl(gen, parity, data)
+	enable := cacheInverse(data, parity)
+	if ext == avx2 {
+		if enable {
+			c := make(map[uint32]matrix)
 			return &encAVX2{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
 		} else {
 			return &encAVX2{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
 		}
 	} else {
-		if cacheInverse(data, parity) {
+		if enable {
+			c := make(map[uint32]matrix)
 			return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
 		} else {
 			return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
@@ -90,11 +114,11 @@ const unitSize int = 16 * 1024
 
 func makeAVX2Do(size int) int {
 	if size < unitSize {
-		c := size / 128
+		c := size >> 7
 		if c == 0 {
 			return unitSize
 		}
-		return c * 128
+		return c << 7
 	}
 	return unitSize
 }
@@ -130,17 +154,14 @@ func vectMulPlusAVX2(tbl, inV, outV []byte)
 
 func (e *encAVX2) matrixMul(start, end int, inVS, outVS [][]byte) {
 	off := 0
-	in := e.data
-	out := e.parity
-	for i := 0; i < out; i++ {
-		t := e.tbl[off : off+32]
-		vectMulAVX2(t, inVS[0][start:end], outVS[i][start:end])
-		off += 32
-	}
-	for i := 1; i < in; i++ {
-		for j := 0; j < out; j++ {
+	for i := 0; i < e.data; i++ {
+		for j := 0; j < e.parity; j++ {
 			t := e.tbl[off : off+32]
-			vectMulPlusAVX2(t, inVS[i][start:end], outVS[j][start:end])
+			if i != 0 {
+				vectMulPlusAVX2(t, inVS[i][start:end], outVS[j][start:end])
+			} else {
+				vectMulAVX2(t, inVS[0][start:end], outVS[j][start:end])
+			}
 			off += 32
 		}
 	}
@@ -389,7 +410,7 @@ func (e *encAVX2) reconstData(vects [][]byte, size int, lost []int, gen matrix) 
 		vtmp[cnt] = vects[p]
 		cnt++
 	}
-	t := makeTbl(gen, out, data)
+	t := initTbl(gen, out, data)
 	etmp := &encAVX2{data: data, parity: out, genMatrix: gen, tbl: t}
 	etmp.Encode(vtmp)
 }
@@ -404,7 +425,7 @@ func (e *encAVX2) reconstParity(vects [][]byte, size int, lost []int, gen matrix
 	for i, p := range lost {
 		vtmp[data+i] = vects[p]
 	}
-	t := makeTbl(gen, out, data)
+	t := initTbl(gen, out, data)
 	etmp := &encAVX2{data: e.data, parity: out, genMatrix: gen, tbl: t}
 	etmp.Encode(vtmp)
 }
@@ -498,7 +519,7 @@ func (e *encSSSE3) reconstData(vects [][]byte, size int, lost []int, gen matrix)
 		vtmp[cnt] = vects[p]
 		cnt++
 	}
-	t := makeTbl(gen, out, data)
+	t := initTbl(gen, out, data)
 	etmp := &encSSSE3{data: data, parity: out, genMatrix: gen, tbl: t}
 	etmp.Encode(vtmp)
 }
@@ -513,7 +534,7 @@ func (e *encSSSE3) reconstParity(vects [][]byte, size int, lost []int, gen matri
 	for i, p := range lost {
 		vtmp[data+i] = vects[p]
 	}
-	t := makeTbl(gen, out, data)
+	t := initTbl(gen, out, data)
 	etmp := &encSSSE3{data: e.data, parity: out, genMatrix: gen, tbl: t}
 	etmp.Encode(vtmp)
 }

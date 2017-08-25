@@ -8,41 +8,14 @@ package reedsolomon
 import (
 	"errors"
 	"fmt"
-	"sync"
 )
 
-// SIMD Instruction Extensions
-const (
-	none = iota
-	avx2
-	ssse3
-)
-
-var extension = none
-
-type (
-	encBase struct {
-		data         int
-		parity       int
-		encodeMatrix matrix
-		genMatrix    matrix
-	}
-	encAVX2  encSIMD
-	encSSSE3 encSIMD
-	encSIMD  struct {
-		data               int
-		parity             int
-		encodeMatrix       matrix
-		genMatrix          matrix
-		tbl                []byte //  multiply-tables of element in generator-matrix
-		enableInverseCache bool
-		inverseCache       matrixCache // inverse matrix's cache
-	}
-	matrixCache struct {
-		sync.RWMutex
-		cache map[uint32]matrix
-	}
-)
+type encBase struct {
+	data         int
+	parity       int
+	encodeMatrix matrix
+	genMatrix    matrix
+}
 
 type EncodeReconster interface {
 	Encode(vects [][]byte) error
@@ -109,15 +82,14 @@ func (e *encBase) Encode(vects [][]byte) (err error) {
 	if err != nil {
 		return
 	}
-	inVS := vects[:in]
-	outVS := vects[in:]
 	gen := e.genMatrix
-	for i := 0; i < out; i++ {
-		vectMul(gen[i*in], inVS[0], outVS[i])
-	}
-	for i := 1; i < in; i++ {
+	for i := 0; i < in; i++ {
 		for j := 0; j < out; j++ {
-			vectMulPlus(gen[j*in+i], inVS[i], outVS[j])
+			if i != 0 {
+				vectMulPlus(gen[j*in+i], vects[:in][i], vects[in:][j])
+			} else {
+				vectMul(gen[j*in], vects[:in][0], vects[in:][j])
+			}
 		}
 	}
 	return

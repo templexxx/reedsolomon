@@ -28,7 +28,6 @@ TEXT ·copy32B(SB), NOSPLIT, $0
     MOVOU 16(BX), X1
     MOVOU X0, (AX)
     MOVOU X1, 16(AX)
-    VZEROUPPER
     RET
 
 // func vectMulSSSE3(tbl, inV, outV []byte)

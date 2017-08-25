@@ -101,7 +101,7 @@ func TestVerifyMakeTbl(t *testing.T) {
 	copy(expect[32:64], lowhighTbl[23][:])
 	copy(expect[64:96], lowhighTbl[34][:])
 	copy(expect[96:128], lowhighTbl[211][:])
-	tbl := makeTbl(g, 2, 2)
+	tbl := initTbl(g, 2, 2)
 	if !bytes.Equal(expect, tbl) {
 		t.Fatal("rs.VerifyMakeTbl: no match")
 	}
@@ -137,7 +137,7 @@ func verifySIMDEnc(t *testing.T, d, p, ins int) {
 			t.Fatal("rs.verifySIMDEnc: ", err)
 		}
 		g := em[testNumIn*testNumIn:]
-		tbl := makeTbl(g, testNumOut, testNumIn)
+		tbl := initTbl(g, testNumOut, testNumIn)
 		var e EncodeReconster
 		switch ins {
 		case avx2:
