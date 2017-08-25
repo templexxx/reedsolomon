@@ -33,22 +33,22 @@ func TestVerifyBaseEncodeCauchy(t *testing.T) {
 	e := &encBase{data: d, parity: p, genMatrix: g}
 	err := e.Encode(vects)
 	if err != nil {
-		t.Fatal("rs.VerifyBaseEncodeCauchy: ", err)
+		t.Fatal(err)
 	}
 	if vects[5][0] != 97 || vects[5][1] != 64 {
-		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 5 mismatch")
+		t.Fatal("vect 5 mismatch")
 	}
 	if vects[6][0] != 173 || vects[6][1] != 3 {
-		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 6 mismatch")
+		t.Fatal("vect 6 mismatch")
 	}
 	if vects[7][0] != 218 || vects[7][1] != 14 {
-		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 7 mismatch")
+		t.Fatal("vect 7 mismatch")
 	}
 	if vects[8][0] != 107 || vects[8][1] != 35 {
-		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 8 mismatch")
+		t.Fatal("vect 8 mismatch")
 	}
 	if vects[9][0] != 110 || vects[9][1] != 177 {
-		t.Fatal("rs.VerifyBaseEncodeCauchy: vect 9 mismatch")
+		t.Fatal("vect 9 mismatch")
 	}
 }
 
@@ -69,28 +69,28 @@ func TestVerifyBaseEncodeVand(t *testing.T) {
 	}
 	em, err := genEncMatrixVand(d, p)
 	if err != nil {
-		t.Fatal("rs.VerifyBaseEncodeVand: ", err)
+		t.Fatal(err)
 	}
 	g := em[d*d:]
 	e := &encBase{data: d, parity: p, genMatrix: g}
 	err = e.Encode(vects)
 	if err != nil {
-		t.Fatal("rs.VerifyBaseEncodeVand: ", err)
+		t.Fatal(err)
 	}
 	if vects[5][0] != 12 || vects[5][1] != 13 {
-		t.Fatal("rs.VerifyBaseEncodeVand: vect 5 mismatch")
+		t.Fatal("vect 5 mismatch")
 	}
 	if vects[6][0] != 10 || vects[6][1] != 11 {
-		t.Fatal("rs.VerifyBaseEncodeVand: vect 6 mismatch")
+		t.Fatal("vect 6 mismatch")
 	}
 	if vects[7][0] != 14 || vects[7][1] != 15 {
-		t.Fatal("rs.VerifyBaseEncodeVand: vect 7 mismatch")
+		t.Fatal("vect 7 mismatch")
 	}
 	if vects[8][0] != 90 || vects[8][1] != 91 {
-		t.Fatal("rs.VerifyBaseEncodeVand: vect 8 mismatch")
+		t.Fatal("vect 8 mismatch")
 	}
 	if vects[9][0] != 94 || vects[9][1] != 95 {
-		t.Fatal("rs.VerifyBaseEncodeVand: shard 9 mismatch")
+		t.Fatal("shard 9 mismatch")
 	}
 }
 
@@ -103,7 +103,7 @@ func TestVerifyMakeTbl(t *testing.T) {
 	copy(expect[96:128], lowhighTbl[211][:])
 	tbl := initTbl(g, 2, 2)
 	if !bytes.Equal(expect, tbl) {
-		t.Fatal("rs.VerifyMakeTbl: no match")
+		t.Fatal("mismatch")
 	}
 }
 
@@ -117,6 +117,7 @@ func fillRandom(v []byte) {
 	}
 }
 
+//const verifySize = unitSize + 128 + 32 + 7
 const verifySize = 128 + 32 + 7
 
 func verifySIMDEnc(t *testing.T, d, p, ins int) {
@@ -134,7 +135,7 @@ func verifySIMDEnc(t *testing.T, d, p, ins int) {
 		}
 		em, err := genEncMatrixVand(testNumIn, testNumOut)
 		if err != nil {
-			t.Fatal("rs.verifySIMDEnc: ", err)
+			t.Fatal(err)
 		}
 		g := em[testNumIn*testNumIn:]
 		tbl := initTbl(g, testNumOut, testNumIn)
@@ -147,12 +148,12 @@ func verifySIMDEnc(t *testing.T, d, p, ins int) {
 		}
 		err = e.Encode(vects1)
 		if err != nil {
-			t.Fatal("rs.verifySIMDEnc: ", err)
+			t.Fatal(err)
 		}
 		eb := &encBase{data: d, parity: p, genMatrix: g}
 		err = eb.Encode(vects2)
 		if err != nil {
-			t.Fatal("rs.verifySIMDEnc: ", err)
+			t.Fatal(err)
 		}
 		for k, v1 := range vects1 {
 			if !bytes.Equal(v1, vects2[k]) {
@@ -163,7 +164,7 @@ func verifySIMDEnc(t *testing.T, d, p, ins int) {
 				case ssse3:
 					ext = "ssse3"
 				}
-				t.Fatalf("rs.verifySIMDEnc: %s no match base enc; vect: %d; size: %d", ext, k, i)
+				t.Fatalf("%s no match base enc; vect: %d; size: %d", ext, k, i)
 			}
 		}
 	}
@@ -171,17 +172,17 @@ func verifySIMDEnc(t *testing.T, d, p, ins int) {
 
 func TestVerifyAVX2(t *testing.T) {
 	if !hasAVX2() {
-		t.Fatal("rs.TestVerifyAVX2: no AVX2")
+		t.Fatal("no AVX2")
 	}
 	verifySIMDEnc(t, testNumIn, testNumOut, avx2)
 }
 
-func TestVerifySSSE3(t *testing.T) {
-	if !hasAVX2() {
-		t.Fatal("rs.TestVerifyAVX2: no SSSE3")
-	}
-	verifySIMDEnc(t, testNumIn, testNumOut, ssse3)
-}
+//func TestVerifySSSE3(t *testing.T) {
+//	if !hasAVX2() {
+//		t.Fatal("rs.TestVerifyAVX2: no SSSE3")
+//	}
+//	verifySIMDEnc(t, testNumIn, testNumOut, ssse3)
+//}
 
 func benchEnc(b *testing.B, d, p, size int) {
 	vects := make([][]byte, d+p)
@@ -194,18 +195,18 @@ func benchEnc(b *testing.B, d, p, size int) {
 	}
 	e, err := New(d, p)
 	if err != nil {
-		b.Fatal("rs.benchEnc: ", err)
+		b.Fatal(err)
 	}
 	err = e.Encode(vects)
 	if err != nil {
-		b.Fatal("rs.benchEnc: ", err)
+		b.Fatal(err)
 	}
 	b.SetBytes(int64(d * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		err = e.Encode(vects)
 		if err != nil {
-			b.Fatal("rs.benchEnc: ", err)
+			b.Fatal(err)
 		}
 	}
 }
@@ -257,20 +258,20 @@ func benchEncBase(b *testing.B, d, p, size int) {
 	}
 	em, err := genEncMatrixVand(d, p)
 	if err != nil {
-		b.Fatal("rs.benchEncBase: ", err)
+		b.Fatal(err)
 	}
 	g := em[d*d:]
 	e := &encBase{data: d, parity: p, genMatrix: g}
 	err = e.Encode(vects)
 	if err != nil {
-		b.Fatal("rs.benchEncBase: ", err)
+		b.Fatal(err)
 	}
 	b.SetBytes(int64(d * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		err = e.Encode(vects)
 		if err != nil {
-			b.Fatal("rs.benchEncBase: ", err)
+			b.Fatal(err)
 		}
 	}
 }

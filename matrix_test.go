@@ -8,7 +8,7 @@ import (
 func TestEncMatrixVand(t *testing.T) {
 	a, err := genEncMatrixVand(4, 4)
 	if err != nil {
-		t.Fatal("rs.TestEncMatrixVand: ", err)
+		t.Fatal(err)
 	}
 	e := []byte{1, 0, 0, 0,
 		0, 1, 0, 0,
@@ -19,7 +19,7 @@ func TestEncMatrixVand(t *testing.T) {
 		18, 20, 27, 28,
 		20, 18, 28, 27}
 	if !bytes.Equal(a, e) {
-		t.Fatal("rs.TestEncMatrixVand: not match")
+		t.Fatal("mismatch")
 	}
 }
 
@@ -34,7 +34,7 @@ func TestEncMatrixCauchy(t *testing.T) {
 		122, 186, 71, 167,
 		186, 122, 167, 71}
 	if !bytes.Equal(a, e) {
-		t.Fatal("rs.TestEncMatrixCauchy: not match")
+		t.Fatal("mismatch")
 	}
 }
 
@@ -97,19 +97,19 @@ func TestMatrixInvert(t *testing.T) {
 		m := matrix(c.matrixData)
 		actual, actualErr := m.invert(c.cols)
 		if actualErr != nil && c.ok {
-			t.Errorf("rs.TestMatrixInvert: case.%d, expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
+			t.Errorf("case.%d, expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
 		}
 		if actualErr == nil && !c.ok {
-			t.Errorf("rs.TestMatrixInvert: case.%d, expected to fail with <ERROR> \"%s\", but passed", i+1, c.expectedErr)
+			t.Errorf("case.%d, expected to fail with <ERROR> \"%s\", but passed", i+1, c.expectedErr)
 		}
 		if actualErr != nil && !c.ok {
 			if c.expectedErr != actualErr {
-				t.Errorf("rs.TestMatrixInvert: case.%d, expected to fail with error \"%s\", but instead failed with error \"%s\"", i+1, c.expectedErr, actualErr)
+				t.Errorf("case.%d, expected to fail with error \"%s\", but instead failed with error \"%s\"", i+1, c.expectedErr, actualErr)
 			}
 		}
 		if actualErr == nil && c.ok {
 			if !bytes.Equal(c.expect, actual) {
-				t.Errorf("rs.TestMatrixInvert: case.%d, not match", i+1)
+				t.Errorf("case.%d, mismatch", i+1)
 			}
 		}
 	}
@@ -123,7 +123,7 @@ func benchmarkInvert(b *testing.B, size int) {
 	for i := 0; i < b.N; i++ {
 		_, err := matrix(m[:size*size]).invert(size)
 		if err != nil {
-			b.Fatal("rs.benchmarkInvert: ", err)
+			b.Fatal(err)
 		}
 	}
 }

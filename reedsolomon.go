@@ -17,6 +17,7 @@ type encBase struct {
 	genMatrix    matrix
 }
 
+// EncodeReconster implements for Reed-Solomon Encoding/Reconstructing
 type EncodeReconster interface {
 	Encode(vects [][]byte) error
 	Reconstruct(vects [][]byte) error
@@ -28,12 +29,12 @@ func checkNumVects(data, parity int) error {
 		return errors.New("rs.New: data or parity <= 0")
 	}
 	if data+parity >= 255 { //usually, data <= 20 & parity <= 6
-		return errors.New(fmt.Sprintf("rs.New: data+parity >= 255"))
+		return fmt.Errorf("rs.New: data+parity >= 255")
 	}
 	return nil
 }
 
-// New: vandermonde matrix as Encoding matrix
+// New create an EncodeReconster (vandermonde matrix as Encoding matrix)
 func New(data, parity int) (enc EncodeReconster, err error) {
 	err = checkNumVects(data, parity)
 	if err != nil {
@@ -46,7 +47,7 @@ func New(data, parity int) (enc EncodeReconster, err error) {
 	return newRS(data, parity, e), nil
 }
 
-// NewCauchy: cauchy matrix as Generator Matrix
+// NewCauchy create an EncodeReconster (cauchy matrix as Generator Matrix)
 func NewCauchy(data, parity int) (enc EncodeReconster, err error) {
 	err = checkNumVects(data, parity)
 	if err != nil {
@@ -59,7 +60,7 @@ func NewCauchy(data, parity int) (enc EncodeReconster, err error) {
 func checkEncVects(in, out int, vects [][]byte) error {
 	v := len(vects)
 	if in+out != v {
-		return errors.New(fmt.Sprintf("rs.Enc: vects not match, in: %d out: %d vects: %d", in, out, v))
+		return fmt.Errorf("rs.Enc: vects not match, in: %d out: %d vects: %d", in, out, v)
 	}
 
 	s := len(vects[0])
@@ -173,7 +174,7 @@ func makeReconstInfo(data int, vects [][]byte, dataOnly bool) (info reconstInfo,
 		return
 	}
 	if len(has) != data {
-		err = errors.New(fmt.Sprintf("rs.Reconst: not enough vects, have: %d, data: %d", len(has), data))
+		err = fmt.Errorf("rs.Reconst: not enough vects, have: %d, data: %d", len(has), data)
 		return
 	}
 	size := len(vects[has[0]])
@@ -208,7 +209,7 @@ func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
 	data := e.data
 	parity := e.parity
 	if data+parity != len(vects) {
-		return errors.New(fmt.Sprintf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects)))
+		return fmt.Errorf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects))
 	}
 	info, err := makeReconstInfo(data, vects, dataOnly)
 	if err != nil {

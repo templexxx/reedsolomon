@@ -1,7 +1,6 @@
 package reedsolomon
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 )
@@ -96,17 +95,14 @@ func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
 		if enable {
 			c := make(map[uint32]matrix)
 			return &encAVX2{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
-		} else {
-			return &encAVX2{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
 		}
-	} else {
-		if enable {
-			c := make(map[uint32]matrix)
-			return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
-		} else {
-			return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
-		}
+		return &encAVX2{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
 	}
+	if enable {
+		c := make(map[uint32]matrix)
+		return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
+	}
+	return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
 }
 
 // size of sub-vector
@@ -128,18 +124,16 @@ func (e *encAVX2) Encode(vects [][]byte) (err error) {
 	if err != nil {
 		return
 	}
-	inVS := vects[:e.data]
-	outVS := vects[e.data:]
-	size := len(inVS[0])
+	size := len(vects[0])
 	start, end := 0, 0
 	do := makeAVX2Do(size)
 	for start < size {
 		end = start + do
 		if end <= size {
-			e.matrixMul(start, end, inVS, outVS)
+			e.matrixMul(start, end, vects[:e.data], vects[e.data:])
 			start = end
 		} else {
-			e.matrixMulRemain(start, size, inVS, outVS)
+			e.matrixMulRemain(start, size, vects[:e.data], vects[e.data:])
 			start = size
 		}
 	}
@@ -360,7 +354,7 @@ func (e *encAVX2) reconst(vects [][]byte, dataOnly bool) (err error) {
 	data := e.data
 	parity := e.parity
 	if data+parity != len(vects) {
-		return errors.New(fmt.Sprintf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects)))
+		return fmt.Errorf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects))
 	}
 	info, err := makeReconstInfo(data, vects, dataOnly)
 	if err != nil {
@@ -469,7 +463,7 @@ func (e *encSSSE3) reconst(vects [][]byte, dataOnly bool) (err error) {
 	data := e.data
 	parity := e.parity
 	if data+parity != len(vects) {
-		return errors.New(fmt.Sprintf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects)))
+		return fmt.Errorf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects))
 	}
 	info, err := makeReconstInfo(data, vects, dataOnly)
 	if err != nil {

@@ -81,6 +81,7 @@ loop:
 	ADDQ $128, out_addr
 	SUBQ $1, len
 	JG  loop
+	VZEROUPPER
 	RET
 
 // func vectMulPlusAVX2(tbl, inV, outV []byte)
@@ -146,6 +147,7 @@ loop:
 	ADDQ $128, out_addr
 	SUBQ $1, len
 	JG  loop
+	VZEROUPPER
 	RET
 
 // func vectMulAVX2_32B(tbl, inV, outV []byte)
@@ -176,6 +178,7 @@ loop:
 	ADDQ $32, out_addr
 	SUBQ $1, len
 	JG  loop
+	VZEROUPPER
 	RET
 
 // func vectMulPlusAVX2_32B(tbl, inV, outV []byte)
@@ -207,6 +210,7 @@ loop:
 	ADDQ $32, out_addr
 	SUBQ $1, len
 	JG  loop
+	VZEROUPPER
 	RET
 
 TEXT ·hasAVX2(SB), NOSPLIT, $0

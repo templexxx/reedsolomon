@@ -98,7 +98,7 @@ func (m matrix) invert(n int) (matrix, error) {
 	return raw.subMatrix(n), nil
 }
 
-var errSingular error = errors.New("rs.invert: matrix is singular")
+var errSingular = errors.New("rs.invert: matrix is singular")
 
 func (m matrix) gaussJordan(rows, columns int) error {
 	for r := 0; r < rows; r++ {
