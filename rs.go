@@ -10,13 +10,6 @@ import (
 	"fmt"
 )
 
-type encBase struct {
-	data         int
-	parity       int
-	encodeMatrix matrix
-	genMatrix    matrix
-}
-
 // EncodeReconster implements for Reed-Solomon Encoding/Reconstructing
 type EncodeReconster interface {
 	Encode(vects [][]byte) error
@@ -24,19 +17,19 @@ type EncodeReconster interface {
 	ReconstructData(vects [][]byte) error
 }
 
-func checkNumVects(data, parity int) error {
+func checkCfg(data, parity int) error {
 	if (data <= 0) || (parity <= 0) {
 		return errors.New("rs.New: data or parity <= 0")
 	}
 	if data+parity >= 255 { //usually, data <= 20 & parity <= 6
-		return fmt.Errorf("rs.New: data+parity >= 255")
+		return errors.New("rs.New: data+parity >= 255")
 	}
 	return nil
 }
 
 // New create an EncodeReconster (vandermonde matrix as Encoding matrix)
 func New(data, parity int) (enc EncodeReconster, err error) {
-	err = checkNumVects(data, parity)
+	err = checkCfg(data, parity)
 	if err != nil {
 		return
 	}
@@ -49,7 +42,7 @@ func New(data, parity int) (enc EncodeReconster, err error) {
 
 // NewCauchy create an EncodeReconster (cauchy matrix as Generator Matrix)
 func NewCauchy(data, parity int) (enc EncodeReconster, err error) {
-	err = checkNumVects(data, parity)
+	err = checkCfg(data, parity)
 	if err != nil {
 		return
 	}
@@ -57,22 +50,11 @@ func NewCauchy(data, parity int) (enc EncodeReconster, err error) {
 	return newRS(data, parity, e), nil
 }
 
-func checkEncVects(in, out int, vects [][]byte) error {
-	v := len(vects)
-	if in+out != v {
-		return fmt.Errorf("rs.Enc: vects not match, in: %d out: %d vects: %d", in, out, v)
-	}
-
-	s := len(vects[0])
-	if s == 0 {
-		return errors.New("rs.Enc: vects size = 0")
-	}
-	for i := 1; i < v; i++ {
-		if len(vects[i]) != s {
-			return errors.New("rs.Enc: vects size not match")
-		}
-	}
-	return nil
+type encBase struct {
+	data         int
+	parity       int
+	encodeMatrix matrix
+	genMatrix    matrix
 }
 
 // Encode : multiply generator-matrix with data
@@ -94,6 +76,31 @@ func (e *encBase) Encode(vects [][]byte) (err error) {
 		}
 	}
 	return
+}
+
+func matchRSCfg(in, out, vects int) error {
+	if in+out != vects {
+		return fmt.Errorf("rs.Enc: vects not match, in: %d out: %d vects: %d", in, out, vects)
+	}
+	return nil
+}
+
+func checkEncVects(in, out int, vects [][]byte) error {
+	v := len(vects)
+	err := matchRSCfg(in, out, v)
+	if err != nil {
+		return err
+	}
+	s := len(vects[0])
+	if s == 0 {
+		return errors.New("rs.Enc: vects size = 0")
+	}
+	for i := 1; i < v; i++ {
+		if len(vects[i]) != s {
+			return errors.New("rs.Enc: vects size not match")
+		}
+	}
+	return nil
 }
 
 func vectMul(c byte, inV, outV []byte) {
@@ -119,6 +126,87 @@ func (e *encBase) Reconstruct(vects [][]byte) (err error) {
 // ReconstructData  : reconstruct lost data
 func (e *encBase) ReconstructData(vects [][]byte) (err error) {
 	return e.reconst(vects, true)
+}
+
+func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
+	data := e.data
+	info, err := makeReconstInfo(data, e.parity, vects, dataOnly)
+	if err != nil {
+		return
+	}
+	if info.dataOK && info.parityOK {
+		return
+	}
+	em := e.encodeMatrix
+	if !info.dataOK {
+		im, err2 := makeInverse(em, info.has, data)
+		if err2 != nil {
+			return err2
+		}
+		dataLost := info.data
+		rgData := make([]byte, len(dataLost)*data)
+		for i, p := range dataLost {
+			copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
+		}
+		e.reconstData(vects, info.vectSize, dataLost, rgData)
+	}
+	if !info.parityOK {
+		parityLost := info.parity
+		rgParity := make([]byte, len(parityLost)*data)
+		for i, p := range parityLost {
+			copy(rgParity[i*data:i*data+data], em[data*data+p*data:data*data+p*data+data])
+		}
+		e.reconstParity(vects, info.vectSize, parityLost, rgParity)
+	}
+	return nil
+}
+
+type reconstInfo struct {
+	dataOK   bool
+	parityOK bool
+	vectSize int
+	has      []int
+	data     []int
+	parity   []int
+}
+
+func makeReconstInfo(data, parity int, vects [][]byte, dataOnly bool) (info reconstInfo, err error) {
+	err = matchRSCfg(data, parity, len(vects))
+	if err != nil {
+		return
+	}
+	has, dataLost, parityLost := makeLostInfo(data, vects)
+	if len(has) != data {
+		err = fmt.Errorf("rs.Reconst: not enough vects, have: %d, data: %d", len(has), data)
+		return
+	}
+	size := len(vects[has[0]])
+	if size == 0 {
+		err = errors.New("rs.Reconst: vects size = 0")
+		return
+	}
+	if !isMatchVectSize(size, has, vects) {
+		err = errors.New("rs.Reconst: vects size not match")
+		return
+	}
+	if len(dataLost) == 0 {
+		info.dataOK = true
+	}
+	if len(parityLost) == 0 {
+		info.parityOK = true
+	} else {
+		if dataOnly {
+			info.parityOK = true
+		}
+	}
+	if info.dataOK && info.parityOK {
+		return
+	}
+	info.has = has
+	info.data = dataLost
+	info.parity = parityLost
+	info.vectSize = size
+	return
 }
 
 func makeLostInfo(data int, vects [][]byte) (has, dataLost, parityLost []int) {
@@ -149,50 +237,6 @@ func isMatchVectSize(size int, list []int, vects [][]byte) bool {
 	return true
 }
 
-type reconstInfo struct {
-	dataOK   bool
-	parityOK bool
-	vectSize int
-	has      []int
-	data     []int
-	parity   []int
-}
-
-func makeReconstInfo(data int, vects [][]byte, dataOnly bool) (info reconstInfo, err error) {
-	has, dataLost, parityLost := makeLostInfo(data, vects)
-	if len(dataLost) == 0 {
-		info.dataOK = true
-	}
-	if len(parityLost) == 0 {
-		info.parityOK = true
-	} else {
-		if dataOnly {
-			info.parityOK = true
-		}
-	}
-	if info.dataOK && info.parityOK {
-		return
-	}
-	if len(has) != data {
-		err = fmt.Errorf("rs.Reconst: not enough vects, have: %d, data: %d", len(has), data)
-		return
-	}
-	size := len(vects[has[0]])
-	if size == 0 {
-		err = errors.New("rs.Reconst: vects size = 0")
-		return
-	}
-	if !isMatchVectSize(size, has, vects) {
-		err = errors.New("rs.Reconst: vects size not match")
-		return
-	}
-	info.has = has
-	info.data = dataLost
-	info.parity = parityLost
-	info.vectSize = size
-	return
-}
-
 func makeInverse(em matrix, has []int, data int) (matrix, error) {
 	m := newMatrix(data, data)
 	for i, p := range has {
@@ -203,43 +247,6 @@ func makeInverse(em matrix, has []int, data int) (matrix, error) {
 		return nil, err
 	}
 	return im, nil
-}
-
-func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
-	data := e.data
-	parity := e.parity
-	if data+parity != len(vects) {
-		return fmt.Errorf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects))
-	}
-	info, err := makeReconstInfo(data, vects, dataOnly)
-	if err != nil {
-		return
-	}
-	if info.dataOK && info.parityOK {
-		return
-	}
-	em := e.encodeMatrix
-	if !info.dataOK {
-		im, err2 := makeInverse(em, info.has, data)
-		if err2 != nil {
-			return err2
-		}
-		dataLost := info.data
-		rgData := make([]byte, len(dataLost)*data)
-		for i, p := range dataLost {
-			copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
-		}
-		e.reconstData(vects, info.vectSize, dataLost, rgData)
-	}
-	if !info.parityOK {
-		parityLost := info.parity
-		rgParity := make([]byte, len(parityLost)*data)
-		for i, p := range parityLost {
-			copy(rgParity[i*data:i*data+data], em[data*data+p*data:data*data+p*data+data])
-		}
-		e.reconstParity(vects, info.vectSize, parityLost, rgParity)
-	}
-	return nil
 }
 
 func (e *encBase) reconstData(vects [][]byte, size int, lost []int, gen matrix) {
