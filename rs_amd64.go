@@ -120,7 +120,7 @@ func makeAVX2Do(size int) int {
 }
 
 func (e *encAVX2) Encode(vects [][]byte) (err error) {
-	err = checkEncVects(e.data, e.parity, vects)
+	err = checkVect(e.data, e.parity, vects)
 	if err != nil {
 		return
 	}
@@ -221,7 +221,7 @@ func makeSSSE3Do(size int) int {
 }
 
 func (e *encSSSE3) Encode(vects [][]byte) (err error) {
-	err = checkEncVects(e.data, e.parity, vects)
+	err = checkVect(e.data, e.parity, vects)
 	if err != nil {
 		return
 	}

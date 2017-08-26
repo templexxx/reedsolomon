@@ -61,7 +61,7 @@ type encBase struct {
 func (e *encBase) Encode(vects [][]byte) (err error) {
 	in := e.data
 	out := e.parity
-	err = checkEncVects(in, out, vects)
+	err = checkVect(in, out, vects)
 	if err != nil {
 		return
 	}
@@ -85,7 +85,7 @@ func matchRSCfg(in, out, vects int) error {
 	return nil
 }
 
-func checkEncVects(in, out int, vects [][]byte) error {
+func checkVect(in, out int, vects [][]byte) error {
 	v := len(vects)
 	err := matchRSCfg(in, out, v)
 	if err != nil {
