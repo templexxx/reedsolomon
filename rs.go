@@ -240,7 +240,7 @@ func isMatchVectSize(size int, list []int, vects [][]byte) bool {
 func makeInverse(em matrix, has []int, data int) (matrix, error) {
 	m := newMatrix(data, data)
 	for i, p := range has {
-		m[i] = em[p]
+		copy(m[i*data:i*data+data], em[p*data:p*data+data])
 	}
 	im, err := m.invert(data)
 	if err != nil {
@@ -263,6 +263,7 @@ func (e *encBase) reconstData(vects [][]byte, size int, lost []int, gen matrix) 
 		}
 	}
 	for _, p := range lost {
+		vects[p] = make([]byte, size)
 		vtmp[cnt] = vects[p]
 		cnt++
 	}
@@ -279,6 +280,7 @@ func (e *encBase) reconstParity(vects [][]byte, size int, lost []int, gen matrix
 		vtmp[i] = vects[i]
 	}
 	for i, p := range lost {
+		vects[p] = make([]byte, size)
 		vtmp[data+i] = vects[p]
 	}
 	etmp := &encBase{data: e.data, parity: out, genMatrix: gen}
