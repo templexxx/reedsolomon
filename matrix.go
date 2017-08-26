@@ -54,7 +54,6 @@ func gfExp(b byte, n int) byte {
 	return byte(expTbl[ret])
 }
 
-// TODO vand test
 func genEncMatrixVand(data, parity int) (matrix, error) {
 	rows := data + parity
 	vm := genVandMatrix(rows, data)
@@ -67,20 +66,6 @@ func genEncMatrixVand(data, parity int) (matrix, error) {
 	return vm.mul(topI, data+parity, data), nil
 }
 
-func (m matrix) mul(right matrix, rows, cols int) matrix {
-	ret := newMatrix(rows, cols)
-	for i := 0; i < rows; i++ {
-		for j := 0; j < cols; j++ {
-			var v byte
-			for k := 0; k < cols; k++ {
-				v ^= gfMul(m[i*cols+k], right[k*cols+j])
-			}
-			ret[i*cols+j] = v
-		}
-	}
-	return ret
-}
-
 func (m matrix) invert(n int) (matrix, error) {
 	raw := newMatrix(n, 2*n)
 	// [m] -> [m|I]
@@ -89,13 +74,23 @@ func (m matrix) invert(n int) (matrix, error) {
 		copy(raw[2*t:2*t+n], m[t:t+n])
 		raw[2*t+i+n] = byte(1)
 	}
-	// [m|I] -> [I|m'] TODO I?
+	// [m|I] -> [I|m']
 	err := raw.gaussJordan(n, 2*n)
 	if err != nil {
 		return nil, err
 	}
 	// [I|m'] -> [m']
 	return raw.subMatrix(n), nil
+}
+
+func (m matrix) swap(i, j, n int) {
+	for k := 0; k < n; k++ {
+		m[i*n+k], m[j*n+k] = m[j*n+k], m[i*n+k]
+	}
+}
+
+func gfMul(a, b byte) byte {
+	return mulTbl[a][b]
 }
 
 var errSingular = errors.New("rs.invert: matrix is singular")
@@ -142,14 +137,18 @@ func (m matrix) gaussJordan(rows, columns int) error {
 	return nil
 }
 
-func (m matrix) swap(i, j, n int) {
-	for k := 0; k < n; k++ {
-		m[i*n+k], m[j*n+k] = m[j*n+k], m[i*n+k]
+func (m matrix) mul(right matrix, rows, cols int) matrix {
+	ret := newMatrix(rows, cols)
+	for i := 0; i < rows; i++ {
+		for j := 0; j < cols; j++ {
+			var v byte
+			for k := 0; k < cols; k++ {
+				v ^= gfMul(m[i*cols+k], right[k*cols+j])
+			}
+			ret[i*cols+j] = v
+		}
 	}
-}
-
-func gfMul(a, b byte) byte {
-	return mulTbl[a][b]
+	return ret
 }
 
 func (m matrix) subMatrix(size int) matrix {
