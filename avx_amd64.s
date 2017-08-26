@@ -20,6 +20,19 @@
 
 #define tmp0 R8
 
+TEXT ·setYMM(SB), NOSPLIT, $0
+    MOVQ  a+0(FP), tmp0
+    MOVB         $0x0f, DX
+    LONG         $0x2069e3c4; WORD $0x00d2   // VPINSRB $0x00, EDX, XMM2, XMM2
+   	VPBROADCASTB X2, mask
+   	VMOVDQU      mask, (tmp0)
+   	RET
+
+TEXT ·returnYMM(SB), NOSPLIT, $0
+    MOVQ  a+0(FP), tmp0
+    VMOVDQU mask, (tmp0)
+    RET
+
 // func vectMulAVX2(tbl, inV, outV []byte)
 TEXT ·vectMulAVX2(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
@@ -81,7 +94,7 @@ loop:
 	ADDQ $128, out_addr
 	SUBQ $1, len
 	JG  loop
-	VZEROUPPER
+	
 	RET
 
 // func vectMulPlusAVX2(tbl, inV, outV []byte)
@@ -147,7 +160,7 @@ loop:
 	ADDQ $128, out_addr
 	SUBQ $1, len
 	JG  loop
-	VZEROUPPER
+	
 	RET
 
 // func vectMulAVX2_32B(tbl, inV, outV []byte)
@@ -178,7 +191,7 @@ loop:
 	ADDQ $32, out_addr
 	SUBQ $1, len
 	JG  loop
-	VZEROUPPER
+	
 	RET
 
 // func vectMulPlusAVX2_32B(tbl, inV, outV []byte)
@@ -210,7 +223,7 @@ loop:
 	ADDQ $32, out_addr
 	SUBQ $1, len
 	JG  loop
-	VZEROUPPER
+	
 	RET
 
 TEXT ·hasAVX2(SB), NOSPLIT, $0
