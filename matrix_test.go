@@ -2,23 +2,8 @@ package reedsolomon
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 )
-
-func TestReturnYMM(t *testing.T) {
-	s := make([]byte, 32)
-	setYMM(s)
-	fmt.Println(s)
-	returnYMM(s)
-	fmt.Println(s)
-}
-
-//go:noescape
-func returnYMM(s []byte)
-
-//go:noescape
-func setYMM(s []byte)
 
 func TestEncMatrixVand(t *testing.T) {
 	a, err := genEncMatrixVand(4, 4)

@@ -177,12 +177,12 @@ func TestVerifyAVX2(t *testing.T) {
 	verifySIMDEnc(t, testNumIn, testNumOut, avx2)
 }
 
-//func TestVerifySSSE3(t *testing.T) {
-//	if !hasAVX2() {
-//		t.Fatal("rs.TestVerifyAVX2: no SSSE3")
-//	}
-//	verifySIMDEnc(t, testNumIn, testNumOut, ssse3)
-//}
+func TestVerifySSSE3(t *testing.T) {
+	if !hasAVX2() {
+		t.Fatal("rs.TestVerifyAVX2: no SSSE3")
+	}
+	verifySIMDEnc(t, testNumIn, testNumOut, ssse3)
+}
 
 func benchEnc(b *testing.B, d, p, size int) {
 	vects := make([][]byte, d+p)
@@ -215,6 +215,9 @@ func BenchmarkEnc10x4_1KB(b *testing.B) {
 	benchEnc(b, testNumIn, testNumOut, kb)
 }
 
+func BenchmarkEnc10x4_1350B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1350)
+}
 func BenchmarkEnc10x4_1400B(b *testing.B) {
 	benchEnc(b, testNumIn, testNumOut, 1400)
 }
