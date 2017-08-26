@@ -1,15 +1,8 @@
 package reedsolomon
 
 import (
-	"fmt"
 	"sync"
 )
-
-//go:noescape
-func hasAVX2() bool
-
-//go:noescape
-func hasSSSE3() bool
 
 // SIMD Instruction Extensions
 const (
@@ -27,6 +20,12 @@ func getEXT() int {
 		return none
 	}
 }
+
+//go:noescape
+func hasAVX2() bool
+
+//go:noescape
+func hasSSSE3() bool
 
 // limitVectMC : data+parity must < limitVectMC for having inverse matrix cache
 // there is at most 38760 inverse matrix (data: 14, parity: 6, calculated by mathtool/cntinverse)
@@ -75,7 +74,8 @@ type (
 		genMatrix          matrix
 		tbl                []byte //  multiply-tables of element in generator-matrix
 		enableInverseCache bool
-		inverseCache       matrixCache // inverse matrix's cache
+		// TODO *sync.map
+		inverseCache matrixCache // inverse matrix's cache
 	}
 	matrixCache struct {
 		sync.RWMutex
@@ -108,13 +108,13 @@ func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
 // size of sub-vector
 const unitSize int = 16 * 1024
 
-func makeAVX2Do(size int) int {
+func makeDo(size int) int {
 	if size < unitSize {
-		c := size >> 7
+		c := size >> 4
 		if c == 0 {
 			return unitSize
 		}
-		return c << 7
+		return c << 4
 	}
 	return unitSize
 }
@@ -124,16 +124,18 @@ func (e *encAVX2) Encode(vects [][]byte) (err error) {
 	if err != nil {
 		return
 	}
+	inVS := vects[:e.data]
+	outVS := vects[e.data:]
 	size := len(vects[0])
 	start, end := 0, 0
-	do := makeAVX2Do(size)
+	do := makeDo(size)
 	for start < size {
 		end = start + do
 		if end <= size {
-			e.matrixMul(start, end, vects[:e.data], vects[e.data:])
+			e.matrixMul(start, end, inVS, outVS)
 			start = end
 		} else {
-			e.matrixMulRemain(start, size, vects[:e.data], vects[e.data:])
+			e.matrixMulRemain(start, size, inVS, outVS)
 			start = size
 		}
 	}
@@ -161,63 +163,25 @@ func (e *encAVX2) matrixMul(start, end int, inVS, outVS [][]byte) {
 	}
 }
 
-//go:noescape
-func vectMulAVX2_32B(tbl, inV, outV []byte)
-
-//go:noescape
-func vectMulPlusAVX2_32B(tbl, inV, outV []byte)
-
-func (e *encAVX2) matrixMul32B(start, end int, inVS, outVS [][]byte) {
-	in := e.data
-	out := e.parity
-	off := 0
-	for i := 0; i < out; i++ {
-		t := e.tbl[off : off+32]
-		vectMulAVX2_32B(t, inVS[0][start:end], outVS[i][start:end])
-		off += 32
-	}
-	for i := 1; i < in; i++ {
-		for j := 0; j < out; j++ {
-			t := e.tbl[off : off+32]
-			vectMulPlusAVX2_32B(t, inVS[i][start:end], outVS[j][start:end])
-			off += 32
-		}
-	}
-}
-
 func (e *encAVX2) matrixMulRemain(start, end int, inVS, outVS [][]byte) {
 	undone := end - start
-	if undone >= 32 {
-		e.matrixMul32B(start, end, inVS, outVS)
+	do := (undone >> 4) << 4
+	if do >= 16 {
+		e.matrixMul(start, start+do, inVS, outVS)
 	}
-	done := (undone >> 5) << 5
-	undone = undone - done
-	if undone > 0 {
-		in := e.data
-		out := e.parity
-		gen := e.genMatrix
-		start = start + done
-		for i := 0; i < in; i++ {
-			for j := 0; j < out; j++ {
-				if i == 0 {
-					vectMul(gen[j*in+i], inVS[i][start:end], outVS[j][start:end])
+	if undone > do {
+		start += do
+		g := e.genMatrix
+		for i := 0; i < e.data; i++ {
+			for j := 0; j < e.parity; j++ {
+				if i != 0 {
+					vectMulPlus(g[j*e.data+i], inVS[i][start:], outVS[j][start:])
 				} else {
-					vectMulPlus(gen[j*in+i], inVS[i][start:end], outVS[j][start:end])
+					vectMul(g[j*e.data], inVS[0][start:], outVS[j][start:])
 				}
 			}
 		}
 	}
-}
-
-func makeSSSE3Do(size int) int {
-	if size < unitSize {
-		c := size / 32
-		if c == 0 {
-			return unitSize
-		}
-		return c * 32
-	}
-	return unitSize
 }
 
 func (e *encSSSE3) Encode(vects [][]byte) (err error) {
@@ -229,7 +193,7 @@ func (e *encSSSE3) Encode(vects [][]byte) (err error) {
 	outVS := vects[e.data:]
 	size := len(inVS[0])
 	start, end := 0, 0
-	do := makeSSSE3Do(size)
+	do := makeDo(size)
 	for start < size {
 		end = start + do
 		if end <= size {
@@ -251,41 +215,14 @@ func vectMulPlusSSSE3(tbl, in, out []byte)
 
 func (e *encSSSE3) matrixMul(start, end int, inVS, outVS [][]byte) {
 	off := 0
-	in := e.data
-	out := e.parity
-	for i := 0; i < out; i++ {
-		t := e.tbl[off : off+32]
-		vectMulSSSE3(t, inVS[0][start:end], outVS[i][start:end])
-		off += 32
-	}
-	for i := 1; i < in; i++ {
-		for j := 0; j < out; j++ {
+	for i := 0; i < e.data; i++ {
+		for j := 0; j < e.parity; j++ {
 			t := e.tbl[off : off+32]
-			vectMulPlusSSSE3(t, inVS[i][start:end], outVS[j][start:end])
-			off += 32
-		}
-	}
-}
-
-//go:noescape
-func vectMulSSSE3_16B(tbl, inV, outV []byte)
-
-//go:noescape
-func vectMulPlusSSSE3_16B(tbl, inV, outV []byte)
-
-func (e *encSSSE3) matrixMul16B(start, end int, inVS, outVS [][]byte) {
-	in := e.data
-	out := e.parity
-	off := 0
-	for i := 0; i < out; i++ {
-		t := e.tbl[off : off+32]
-		vectMulSSSE3_16B(t, inVS[0][start:end], outVS[i][start:end])
-		off += 32
-	}
-	for i := 1; i < in; i++ {
-		for j := 0; j < out; j++ {
-			t := e.tbl[off : off+32]
-			vectMulPlusSSSE3_16B(t, inVS[i][start:end], outVS[j][start:end])
+			if i != 0 {
+				vectMulPlusSSSE3(t, inVS[i][start:end], outVS[j][start:end])
+			} else {
+				vectMulSSSE3(t, inVS[0][start:end], outVS[j][start:end])
+			}
 			off += 32
 		}
 	}
@@ -293,22 +230,19 @@ func (e *encSSSE3) matrixMul16B(start, end int, inVS, outVS [][]byte) {
 
 func (e *encSSSE3) matrixMulRemain(start, end int, inVS, outVS [][]byte) {
 	undone := end - start
-	if undone >= 16 {
-		e.matrixMul16B(start, end, inVS, outVS)
+	do := (undone >> 4) << 4
+	if do >= 16 {
+		e.matrixMul(start, start+do, inVS, outVS)
 	}
-	done := (undone >> 4) << 4
-	undone = undone - done
-	if undone > 0 {
-		in := e.data
-		out := e.parity
-		gen := e.genMatrix
-		start = start + done
-		for i := 0; i < in; i++ {
-			for j := 0; j < out; j++ {
-				if i == 0 {
-					vectMul(gen[j*in+i], inVS[i][start:end], outVS[j][start:end])
+	if undone > do {
+		start += do
+		g := e.genMatrix
+		for i := 0; i < e.data; i++ {
+			for j := 0; j < e.parity; j++ {
+				if i != 0 {
+					vectMulPlus(g[j*e.data+i], inVS[i][start:], outVS[j][start:])
 				} else {
-					vectMulPlus(gen[j*in+i], inVS[i][start:end], outVS[j][start:end])
+					vectMul(g[j*e.data], inVS[0][start:], outVS[j][start:])
 				}
 			}
 		}
@@ -353,10 +287,7 @@ func (e *encAVX2) getInverseCache(has []int) (matrix, error) {
 func (e *encAVX2) reconst(vects [][]byte, dataOnly bool) (err error) {
 	data := e.data
 	parity := e.parity
-	if data+parity != len(vects) {
-		return fmt.Errorf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects))
-	}
-	info, err := makeReconstInfo(data, vects, dataOnly)
+	info, err := makeReconstInfo(data, parity, vects, dataOnly)
 	if err != nil {
 		return
 	}
@@ -462,10 +393,7 @@ func (e *encSSSE3) getInverseCache(has []int) (matrix, error) {
 func (e *encSSSE3) reconst(vects [][]byte, dataOnly bool) (err error) {
 	data := e.data
 	parity := e.parity
-	if data+parity != len(vects) {
-		return fmt.Errorf("rs.Enc: vects not match, data: %d parity: %d vects: %d", data, parity, len(vects))
-	}
-	info, err := makeReconstInfo(data, vects, dataOnly)
+	info, err := makeReconstInfo(data, parity, vects, dataOnly)
 	if err != nil {
 		return
 	}

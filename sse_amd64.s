@@ -33,8 +33,8 @@ TEXT ·copy32B(SB), NOSPLIT, $0
 // func vectMulSSSE3(tbl, inV, outV []byte)
 TEXT ·vectMulSSSE3(SB), NOSPLIT, $0
 	MOVQ         tbl+0(FP), tmp0
-	VMOVDQU      (tmp0), low_tbl
-	VMOVDQU      16(tmp0), high_tbl
+	MOVOU      (tmp0), low_tbl
+	MOVOU      16(tmp0), high_tbl
 	MOVQ         in+24(FP), in_addr
 	MOVQ         out+48(FP), out_addr
 	XORQ   tmp0, tmp0
