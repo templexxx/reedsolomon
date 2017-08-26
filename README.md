@@ -40,7 +40,6 @@ It released by  [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon
 4. New Go version have added some new instruction, and some are what we need here. The byte sequence in asm files are changed to instructions now (unfortunately, I added some new bytes codes)
 5. Delete inverse matrix cache part, it’s a statistical fact that only 2-3% shards need to be repaired. And calculating invert matrix is very fast, so I don't think it will improve performance very much
 6. Instead of copying data, I use maps to save position of data. Reconstruction is as fast as encoding now
-7. AVX intrinsic instructions are not mixed with any of SSE instructions, so we don't need "VZEROUPPER" to avoid AVX-SSE Transition Penalties, it seems improve performance.
 8. Some of Golang's asm OP codes make me uncomfortable, especially the "MOVQ", so I use byte codes to operate the register lower part sometimes. (Thanks to [asm2plan9s](https://github.com/fwessels/asm2plan9s))
 9. I drop the "TEST in_data is empty or not" part in asm file
 10. No R8-R15 register in asm codes, because it need one more byte
