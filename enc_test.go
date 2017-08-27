@@ -118,28 +118,28 @@ func fillRandom(v []byte) {
 }
 
 //const verifySize = unitSize + 128 + 32 + 7
-const verifySize = 128 + 32 + 7
+const verifySize = 256 + 32 + 16 + 15
 
 func verifySIMDEnc(t *testing.T, d, p, ins int) {
 	for i := 1; i <= verifySize; i++ {
-		vects1 := make([][]byte, testNumIn+testNumOut)
-		vects2 := make([][]byte, testNumIn+testNumOut)
-		for j := 0; j < testNumIn+testNumOut; j++ {
+		vects1 := make([][]byte, d+p)
+		vects2 := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
 			vects1[j] = make([]byte, i)
 			vects2[j] = make([]byte, i)
 		}
-		for j := 0; j < testNumIn; j++ {
+		for j := 0; j < d; j++ {
 			rand.Seed(int64(j))
 			fillRandom(vects1[j])
 			copy(vects2[j], vects1[j])
 		}
-		em, err := genEncMatrixVand(testNumIn, testNumOut)
+		em, err := genEncMatrixVand(d, p)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g := em[testNumIn*testNumIn:]
-		tbl := initTbl(g, testNumOut, testNumIn)
-		buf := make([][]byte, testNumIn+testNumOut)
+		g := em[d*d:]
+		tbl := initTbl(g, p, d)
+		buf := make([][]byte, d+p)
 		for i := range buf {
 			buf[i] = make([]byte, 16)
 		}

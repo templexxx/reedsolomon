@@ -51,24 +51,7 @@ ymm:
     VINSERTI128  $1, high_tblx, high_tbl, high_tbl
     VINSERTI128  $1, maskx, mask, mask
     TESTQ        $255, len
-    JZ           aligned
-    MOVQ         len, tmp0
-    ANDQ         $255, tmp0
-
-loop32b:
-    VMOVDQU -32(in)(len*1), in0
-	VPSRLQ  $4, in0, in0_h
-	VPAND   mask, in0_h, in0_h
-	VPAND   mask, in0, in0
-	VPSHUFB in0_h, high_tbl, in0_h
-	VPSHUFB in0, low_tbl, in0
-	VPXOR   in0, in0_h, in0
-	VMOVDQU in0, -32(out)(len*1)
-	SUBQ    $32, len
-	SUBQ    $32, tmp0
-	JG      loop32b
-	CMPQ    len, $0
-	JZ      ret
+    JNZ          not_aligned
 
 // 256bytes/loop
 aligned:
@@ -146,10 +129,31 @@ loop256b:
 	VPSHUFB in1, low_tbl, in1
 	VPXOR   in1, in1_h, in1
 	VMOVDQU in1, 224(out)(pos*1)
-	
+
 	ADDQ    $256, pos
 	CMPQ    len, pos
 	JNE     loop256b
+	VZEROUPPER
+	RET
+
+not_aligned:
+    MOVQ    len, tmp0
+    ANDQ    $255, tmp0
+
+loop32b:
+    VMOVDQU -32(in)(len*1), in0
+	VPSRLQ  $4, in0, in0_h
+	VPAND   mask, in0_h, in0_h
+	VPAND   mask, in0, in0
+	VPSHUFB in0_h, high_tbl, in0_h
+	VPSHUFB in0, low_tbl, in0
+	VPXOR   in0, in0_h, in0
+	VMOVDQU in0, -32(out)(len*1)
+	SUBQ    $32, len
+	SUBQ    $32, tmp0
+	JG      loop32b
+	CMPQ    len, $256
+	JGE     aligned
 	VZEROUPPER
 	RET
 
@@ -166,10 +170,6 @@ one16b:
 	CMPQ     len, $0
 	JNE      ymm
 	RET
-
-ret:
-    VZEROUPPER
-    RET
 
 // func vectMulPlusAVX2(tbl, inV, outV []byte)
 TEXT ·vectMulPlusAVX2(SB), NOSPLIT, $0
