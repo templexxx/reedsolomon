@@ -73,6 +73,7 @@ type (
 		encodeMatrix       matrix
 		genMatrix          matrix
 		tbl                []byte //  multiply-tables of element in generator-matrix
+		buf16b             [][]byte
 		enableInverseCache bool
 		// TODO *sync.map
 		inverseCache matrixCache // inverse matrix's cache
@@ -91,18 +92,22 @@ func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
 	}
 	t := initTbl(gen, parity, data)
 	enable := cacheInverse(data, parity)
+	buf := make([][]byte, data+parity)
+	for i := range buf {
+		buf[i] = make([]byte, 16)
+	}
 	if ext == avx2 {
 		if enable {
 			c := make(map[uint32]matrix)
-			return &encAVX2{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
+			return &encAVX2{buf16b: buf, data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
 		}
-		return &encAVX2{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
+		return &encAVX2{buf16b: buf, data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
 	}
 	if enable {
 		c := make(map[uint32]matrix)
-		return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
+		return &encSSSE3{buf16b: buf, data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: true, inverseCache: matrixCache{cache: c}}
 	}
-	return &encSSSE3{data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
+	return &encSSSE3{buf16b: buf, data: data, parity: parity, encodeMatrix: encodeMatrix, genMatrix: gen, tbl: t, enableInverseCache: false}
 }
 
 // size of sub-vector
@@ -170,17 +175,42 @@ func (e *encAVX2) matrixMulRemain(start, end int, inVS, outVS [][]byte) {
 		e.matrixMul(start, start+do, inVS, outVS)
 	}
 	if undone > do {
+		in := e.data
+		out := e.parity
 		start += do
-		g := e.genMatrix
-		for i := 0; i < e.data; i++ {
-			for j := 0; j < e.parity; j++ {
+		inTmp := e.buf16b[:in]
+		for i := range inTmp {
+			copy(inTmp[i], inVS[i][start:])
+		}
+		outTmp := e.buf16b[in:]
+		for i := range outTmp {
+			copy(outTmp[i], outVS[i][start:])
+		}
+		off := 0
+		for i := 0; i < in; i++ {
+			for j := 0; j < out; j++ {
+				t := e.tbl[off : off+32]
 				if i != 0 {
-					vectMulPlus(g[j*e.data+i], inVS[i][start:], outVS[j][start:])
+					vectMulPlusAVX2(t, inTmp[i], outTmp[j])
 				} else {
-					vectMul(g[j*e.data], inVS[0][start:], outVS[j][start:])
+					vectMulAVX2(t, inTmp[0], outTmp[j])
 				}
+				off += 32
 			}
 		}
+		for i := range outTmp {
+			copy(outVS[i][start:], outTmp[i])
+		}
+		//g := e.genMatrix
+		//for i := 0; i < in; i++ {
+		//	for j := 0; j < e.parity; j++ {
+		//		if i != 0 {
+		//			vectMulPlus(g[j*in+i], inVS[i][start:], outVS[j][start:])
+		//		} else {
+		//			vectMul(g[j*in], inVS[0][start:], outVS[j][start:])
+		//		}
+		//	}
+		//}
 	}
 }
 
