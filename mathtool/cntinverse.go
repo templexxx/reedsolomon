@@ -6,31 +6,31 @@ import (
 	"os"
 )
 
-var shards = flag.Uint64("shards", 20, "number of shards (data+parity)")
-var data = flag.Uint64("data", 0, "number of parity shards; keep it empty if you want to "+
+var vects = flag.Uint64("vects", 20, "number of vects (data+parity)")
+var data = flag.Uint64("data", 0, "number of data vects; keep it empty if you want to "+
 	"get the max num of inverse matrix")
 
 func init() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  cntinverse [-flags] .ext\n\n")
-		fmt.Fprintf(os.Stderr, "Valid flags:\n")
+		fmt.Printf("Usage of %s:\n", os.Args[0])
+		fmt.Println("  cntinverse [-flags]")
+		fmt.Println("  Valid flags:")
 		flag.PrintDefaults()
 	}
 }
 
 func main() {
 	flag.Parse()
-	if *shards >= 255 {
-		fmt.Fprintf(os.Stderr, "Error: shards must <= 256\n")
+	if *vects > 256 {
+		fmt.Println("Error: vects must <= 256")
 		os.Exit(1)
 	}
 	if *data == 0 {
-		n := getMAXCCombination(*shards)
+		n := getMAXCCombination(*vects)
 		fmt.Println("max num of inverse matrix :", n)
 		os.Exit(0)
 	}
-	n := getCCombination(*shards, *data)
+	n := getCCombination(*vects, *data)
 	fmt.Println("num of inverse matrix:", n)
 	os.Exit(0)
 }
