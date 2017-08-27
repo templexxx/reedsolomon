@@ -296,36 +296,36 @@ func (e *encAVX2) getInverseCache(has []int) (matrix, error) {
 }
 
 func (e *encAVX2) reconst(vects [][]byte, dataOnly bool) (err error) {
-	data := e.data
-	parity := e.parity
-	info, err := makeReconstInfo(data, parity, vects, dataOnly)
-	if err != nil {
-		return
-	}
-	if info.okData && info.okParity {
-		return
-	}
-	em := e.encodeMatrix
-	if !info.okData {
-		im, err2 := e.getInverseCache(info.has)
-		if err2 != nil {
-			return err2
-		}
-		dataLost := info.data
-		rgData := make([]byte, len(dataLost)*data)
-		for i, p := range dataLost {
-			copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
-		}
-		e.reconstData(vects, info.vectSize, dataLost, rgData)
-	}
-	if !info.okParity {
-		parityLost := info.parity
-		rgParity := make([]byte, len(parityLost)*data)
-		for i, p := range parityLost {
-			copy(rgParity[i*data:i*data+data], em[data*data+p*data:data*data+p*data+data])
-		}
-		e.reconstParity(vects, info.vectSize, parityLost, rgParity)
-	}
+	//data := e.data
+	//parity := e.parity
+	//info, err := makeReconstInfo(data, parity, vects, dataOnly)
+	//if err != nil {
+	//	return
+	//}
+	//if info.okData && info.okParity {
+	//	return
+	//}
+	//em := e.encodeMatrix
+	//if !info.okData {
+	//	im, err2 := e.getInverseCache(info.has)
+	//	if err2 != nil {
+	//		return err2
+	//	}
+	//	dataLost := info.data
+	//	rgData := make([]byte, len(dataLost)*data)
+	//	for i, p := range dataLost {
+	//		copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
+	//	}
+	//	e.reconstData(vects, info.vectSize, dataLost, rgData)
+	//}
+	//if !info.okParity {
+	//	parityLost := info.parity
+	//	rgParity := make([]byte, len(parityLost)*data)
+	//	for i, p := range parityLost {
+	//		copy(rgParity[i*data:i*data+data], em[data*data+p*data:data*data+p*data+data])
+	//	}
+	//	e.reconstParity(vects, info.vectSize, parityLost, rgParity)
+	//}
 	return nil
 }
 
@@ -402,36 +402,36 @@ func (e *encSSSE3) getInverseCache(has []int) (matrix, error) {
 }
 
 func (e *encSSSE3) reconst(vects [][]byte, dataOnly bool) (err error) {
-	data := e.data
-	parity := e.parity
-	info, err := makeReconstInfo(data, parity, vects, dataOnly)
-	if err != nil {
-		return
-	}
-	if info.okData && info.okParity {
-		return
-	}
-	em := e.encodeMatrix
-	if !info.okData {
-		im, err2 := e.getInverseCache(info.has)
-		if err2 != nil {
-			return err2
-		}
-		dataLost := info.data
-		rgData := make([]byte, len(dataLost)*data)
-		for i, p := range dataLost {
-			copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
-		}
-		e.reconstData(vects, info.vectSize, dataLost, rgData)
-	}
-	if !info.okParity {
-		parityLost := info.parity
-		rgParity := make([]byte, len(parityLost)*data)
-		for i, p := range parityLost {
-			copy(rgParity[i*data:i*data+data], em[data*data+p*data:data*data+p*data+data])
-		}
-		e.reconstParity(vects, info.vectSize, parityLost, rgParity)
-	}
+	//data := e.data
+	//parity := e.parity
+	//info, err := makeReconstInfo(data, parity, vects, dataOnly)
+	//if err != nil {
+	//	return
+	//}
+	//if info.okData && info.okParity {
+	//	return
+	//}
+	//em := e.encodeMatrix
+	//if !info.okData {
+	//	im, err2 := e.getInverseCache(info.has)
+	//	if err2 != nil {
+	//		return err2
+	//	}
+	//	dataLost := info.data
+	//	rgData := make([]byte, len(dataLost)*data)
+	//	for i, p := range dataLost {
+	//		copy(rgData[i*data:i*data+data], im[p*data:p*data+data])
+	//	}
+	//	e.reconstData(vects, info.vectSize, dataLost, rgData)
+	//}
+	//if !info.okParity {
+	//	parityLost := info.parity
+	//	rgParity := make([]byte, len(parityLost)*data)
+	//	for i, p := range parityLost {
+	//		copy(rgParity[i*data:i*data+data], em[data*data+p*data:data*data+p*data+data])
+	//	}
+	//	e.reconstParity(vects, info.vectSize, parityLost, rgParity)
+	//}
 	return nil
 }
 
