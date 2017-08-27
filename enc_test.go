@@ -139,16 +139,12 @@ func verifySIMDEnc(t *testing.T, d, p, ins int) {
 		}
 		g := em[d*d:]
 		tbl := initTbl(g, p, d)
-		buf := make([][]byte, d+p)
-		for i := range buf {
-			buf[i] = make([]byte, 16)
-		}
 		var e EncodeReconster
 		switch ins {
 		case avx2:
-			e = &encAVX2{buf16b: buf, data: d, parity: p, genMatrix: g, tbl: tbl}
+			e = &encAVX2{data: d, parity: p, genMatrix: g, tbl: tbl}
 		case ssse3:
-			e = &encSSSE3{buf16b: buf, data: d, parity: p, genMatrix: g, tbl: tbl}
+			e = &encSSSE3{data: d, parity: p, genMatrix: g, tbl: tbl}
 		}
 		err = e.Encode(vects1)
 		if err != nil {

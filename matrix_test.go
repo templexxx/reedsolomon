@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestEncMatrixVand(t *testing.T) {
+func TestVerifyEncMatrixVand(t *testing.T) {
 	a, err := genEncMatrixVand(4, 4)
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +23,7 @@ func TestEncMatrixVand(t *testing.T) {
 	}
 }
 
-func TestEncMatrixCauchy(t *testing.T) {
+func TestVerifyEncMatrixCauchy(t *testing.T) {
 	a := genEncMatrixCauchy(4, 4)
 	e := []byte{1, 0, 0, 0,
 		0, 1, 0, 0,
