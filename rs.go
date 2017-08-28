@@ -6,9 +6,7 @@
 
 package reedsolomon
 
-import (
-	"errors"
-)
+import "errors"
 
 // EncodeReconster implements for Reed-Solomon Encoding/Reconstructing
 type EncodeReconster interface {
@@ -17,11 +15,11 @@ type EncodeReconster interface {
 	ReconstructData(vects [][]byte) error
 }
 
-func checkCfg(data, parity int) error {
-	if (data <= 0) || (parity <= 0) {
+func checkCfg(d, p int) error {
+	if (d <= 0) || (p <= 0) {
 		return errors.New("rs.New: data or parity <= 0")
 	}
-	if data+parity > 256 {
+	if d+p > 256 {
 		return errors.New("rs.New: data+parity > 256")
 	}
 	return nil
@@ -155,19 +153,19 @@ func makeInverse(em matrix, has []int, data int) (matrix, error) {
 func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
 	d := e.data
 	p := e.parity
+	total := e.total
 	size, err := checkReconst(d, p, vects)
 	if err != nil {
 		return
 	}
-	hasCnt := 0
-	total := e.total
+	has := 0
 	k := 0
 	dPos := make([]int, d) // for invert matrix
 	dLost := make([]int, 0)
 	pLost := make([]int, 0)
 	for i := 0; i < total; i++ {
 		if vects[i] != nil {
-			hasCnt++
+			has++
 			if k < d {
 				dPos[k] = i
 				k++
@@ -180,10 +178,10 @@ func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
 			}
 		}
 	}
-	if hasCnt == total {
+	if has == total {
 		return nil
 	}
-	if hasCnt < d {
+	if has < d {
 		return errors.New("rs.Reconst: not enough vects")
 	}
 
