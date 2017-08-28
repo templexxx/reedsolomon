@@ -2,8 +2,7 @@
 
 package reedsolomon
 
-func newRS(data, parity int, encodeMatrix matrix) (enc EncodeReconster) {
-	gen := encodeMatrix[data*data:]
-	c := make(map[uint64]matrix)
-	return &encBase{data: data, parity: parity, encode: encodeMatrix, gen: gen}
+func newRS(d, p int, em matrix) (enc EncodeReconster) {
+	g := em[d*d:]
+	return &encBase{data: d, parity: p, total: d + p, encode: em, gen: g}
 }
