@@ -55,15 +55,15 @@ func gfExp(b byte, n int) byte {
 }
 
 func genEncMatrixVand(data, parity int) (matrix, error) {
-	rows := data + parity
-	vm := genVandMatrix(rows, data)
+	total := data + parity
+	vm := genVandMatrix(total, data)
 	top := newMatrix(data, data)
 	copy(top, vm[:data*data])
 	topI, err := top.invert(data)
 	if err != nil {
 		return nil, err
 	}
-	return vm.mul(topI, data+parity, data), nil
+	return vm.mul(topI, total, data), nil
 }
 
 func (m matrix) invert(n int) (matrix, error) {
@@ -75,7 +75,7 @@ func (m matrix) invert(n int) (matrix, error) {
 		raw[2*t+i+n] = byte(1)
 	}
 	// [m|I] -> [I|m']
-	err := raw.gaussJordan(n, 2*n)
+	err := raw.gauss(n, 2*n)
 	if err != nil {
 		return nil, err
 	}
@@ -95,41 +95,41 @@ func gfMul(a, b byte) byte {
 
 var errSingular = errors.New("rs.invert: matrix is singular")
 
-func (m matrix) gaussJordan(rows, columns int) error {
-	for r := 0; r < rows; r++ {
-		if m[2*r*rows+r] == 0 {
-			for rowBelow := r + 1; rowBelow < rows; rowBelow++ {
-				if m[2*rowBelow*rows+r] != 0 {
-					m.swap(r, rowBelow, 2*rows)
+func (m matrix) gauss(rows, cols int) error {
+	for i := 0; i < rows; i++ {
+		if m[i*cols+i] == 0 {
+			for j := i + 1; j < rows; j++ {
+				if m[j*cols+i] != 0 {
+					m.swap(i, j, cols)
 					break
 				}
 			}
 		}
-		if m[2*r*rows+r] == 0 {
+		if m[i*cols+i] == 0 {
 			return errSingular
 		}
-		if m[2*r*rows+r] != 1 {
-			d := m[2*r*rows+r]
+		if m[i*cols+i] != 1 {
+			d := m[i*cols+i]
 			scale := inverseTbl[d]
-			for c := 0; c < columns; c++ {
-				m[2*r*rows+c] = gfMul(m[2*r*rows+c], scale)
+			for c := 0; c < cols; c++ {
+				m[i*cols+c] = gfMul(m[i*cols+c], scale)
 			}
 		}
-		for rowBelow := r + 1; rowBelow < rows; rowBelow++ {
-			if m[2*rowBelow*rows+r] != 0 {
-				scale := m[2*rowBelow*rows+r]
-				for c := 0; c < columns; c++ {
-					m[2*rowBelow*rows+c] ^= gfMul(scale, m[2*r*rows+c])
+		for j := i + 1; j < rows; j++ {
+			if m[j*cols+i] != 0 {
+				scale := m[j*cols+i]
+				for c := 0; c < cols; c++ {
+					m[j*cols+c] ^= gfMul(scale, m[i*cols+c])
 				}
 			}
 		}
 	}
-	for d := 0; d < rows; d++ {
-		for rowAbove := 0; rowAbove < d; rowAbove++ {
-			if m[2*rowAbove*rows+d] != 0 {
-				scale := m[2*rowAbove*rows+d]
-				for c := 0; c < columns; c++ {
-					m[2*rowAbove*rows+c] ^= gfMul(scale, m[2*d*rows+c])
+	for k := 0; k < rows; k++ {
+		for j := 0; j < k; j++ {
+			if m[j*cols+k] != 0 {
+				scale := m[j*cols+k]
+				for c := 0; c < cols; c++ {
+					m[j*cols+c] ^= gfMul(scale, m[k*cols+c])
 				}
 			}
 		}
@@ -138,23 +138,24 @@ func (m matrix) gaussJordan(rows, columns int) error {
 }
 
 func (m matrix) mul(right matrix, rows, cols int) matrix {
-	ret := newMatrix(rows, cols)
+	r := newMatrix(rows, cols)
 	for i := 0; i < rows; i++ {
 		for j := 0; j < cols; j++ {
 			var v byte
 			for k := 0; k < cols; k++ {
 				v ^= gfMul(m[i*cols+k], right[k*cols+j])
 			}
-			ret[i*cols+j] = v
+			r[i*cols+j] = v
 		}
 	}
-	return ret
+	return r
 }
 
-func (m matrix) subMatrix(size int) matrix {
-	ret := newMatrix(size, size)
-	for i := 0; i < size; i++ {
-		copy(ret[i*size:i*size+size], m[2*i*size+size:2*i*size+2*size])
+func (m matrix) subMatrix(n int) matrix {
+	r := newMatrix(n, n)
+	for i := 0; i < n; i++ {
+		off := i * n
+		copy(r[off:off+n], m[2*off+n:2*(off+n)])
 	}
-	return ret
+	return r
 }
