@@ -4,6 +4,10 @@ import (
 	"testing"
 )
 
+//func TestVerifyReconstBase(t *testing.T) {
+//
+//}
+
 // verify reconst in base
 func TestVerifyReconstBase(t *testing.T) {
 	d := 5
@@ -22,7 +26,7 @@ func TestVerifyReconstBase(t *testing.T) {
 	}
 	em := genEncMatrixCauchy(d, p)
 	g := em[d*d:]
-	e := &encBase{data: d, parity: p, total: d + p, genMatrix: g, encodeMatrix: em}
+	e := &encBase{data: d, parity: p, total: d + p, gen: g, encode: em}
 	err := e.Encode(vects)
 	if err != nil {
 		t.Fatal(err)

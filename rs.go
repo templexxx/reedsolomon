@@ -12,7 +12,7 @@ import "errors"
 type EncodeReconster interface {
 	Encode(vects [][]byte) error
 	Reconstruct(vects [][]byte) error
-	ReconstructData(vects [][]byte) error
+	//ReconstructData(vects [][]byte) error
 }
 
 func checkCfg(d, p int) error {
@@ -48,6 +48,24 @@ func NewCauchy(data, parity int) (enc EncodeReconster, err error) {
 	return newRS(data, parity, e), nil
 }
 
+type encBase struct {
+	data   int
+	parity int
+	total  int // data+parity
+	encode matrix
+	gen    matrix
+}
+
+type RSInfo struct {
+	Data   int
+	Parity int
+}
+
+func (e *encBase) Info() RSInfo {
+	return RSInfo{Data: e.data, Parity: e.parity}
+}
+
+// checkER check vects' len&size
 func checkER(d, p int, vs [][]byte, okNil bool) (size int, err error) {
 	if d+p != len(vs) {
 		err = errors.New("rs.checkER: vects not match rs args")
@@ -78,15 +96,7 @@ func checkEnc(d, p int, vs [][]byte) (size int, err error) {
 	return checkER(d, p, vs, false)
 }
 
-type encBase struct {
-	data         int
-	parity       int
-	total        int // data+parity
-	encodeMatrix matrix
-	genMatrix    matrix
-}
-
-// Encode : multiply generator-matrix with data
+// Encode multiply generator-matrix with data
 func (e *encBase) Encode(vects [][]byte) (err error) {
 	d := e.data
 	p := e.parity
@@ -96,7 +106,7 @@ func (e *encBase) Encode(vects [][]byte) (err error) {
 	}
 	dv := vects[:d]
 	pv := vects[d:]
-	g := e.genMatrix
+	g := e.gen
 	for i := 0; i < d; i++ {
 		for j := 0; j < p; j++ {
 			if i != 0 {
@@ -123,13 +133,13 @@ func mulVectAdd(c byte, a, b []byte) {
 	}
 }
 
-// Reconstruct : reconstruct lost data & parity
-// set shard nil if lost
+// Reconstruct repair lost data & parity
+// Set vect nil if lost
 func (e *encBase) Reconstruct(vects [][]byte) (err error) {
 	return e.reconst(vects, false)
 }
 
-// ReconstructData  : reconstruct lost data
+// ReconstructData repair lost data
 func (e *encBase) ReconstructData(vects [][]byte) (err error) {
 	return e.reconst(vects, true)
 }
@@ -138,57 +148,41 @@ func checkReconst(d, p int, vs [][]byte) (size int, err error) {
 	return checkER(d, p, vs, true)
 }
 
-func makeInverse(em matrix, has []int, data int) (matrix, error) {
-	m := newMatrix(data, data)
-	for i, p := range has {
-		copy(m[i*data:i*data+data], em[p*data:p*data+data])
+func (e *encBase) ReconstWithPos(vects [][]byte, pos, dLost, pLost []int) error {
+	return e.reconstWithPos(vects, pos, dLost, pLost, false)
+}
+
+func (e *encBase) ReconsDatatWithPos(vects [][]byte, pos, dLost []int) error {
+	return e.reconstWithPos(vects, pos, dLost, nil, true)
+}
+
+func makeInverse(em matrix, pos []int, d int) (matrix, error) {
+	m := newMatrix(d, d)
+	for i, p := range pos {
+		copy(m[i*d:i*d+d], em[p*d:p*d+d])
 	}
-	im, err := m.invert(data)
+	im, err := m.invert(d)
 	if err != nil {
 		return nil, err
 	}
 	return im, nil
 }
 
-func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
+// ReconstWithPos repair lost data & parity(if !dataOnly) with lost vects position
+// Save bandwidth & disk I/O, the len(pos) always == e.data
+// pos indicate survived vects
+func (e *encBase) reconstWithPos(vects [][]byte, pos, dLost, pLost []int, dataOnly bool) (err error) {
 	d := e.data
 	p := e.parity
-	total := e.total
 	size, err := checkReconst(d, p, vects)
 	if err != nil {
 		return
 	}
-	has := 0
-	k := 0
-	dPos := make([]int, d) // for invert matrix
-	dLost := make([]int, 0)
-	pLost := make([]int, 0)
-	for i := 0; i < total; i++ {
-		if vects[i] != nil {
-			has++
-			if k < d {
-				dPos[k] = i
-				k++
-			}
-		} else {
-			if i < d {
-				dLost = append(dLost, i)
-			} else {
-				pLost = append(pLost, i)
-			}
-		}
-	}
-	if has == total {
-		return nil
-	}
-	if has < d {
-		return errors.New("rs.Reconst: not enough vects")
-	}
 
-	em := e.encodeMatrix
+	em := e.encode
 	dLCnt := len(dLost)
 	if dLCnt != 0 {
-		im, err2 := makeInverse(em, dPos, d)
+		im, err2 := makeInverse(em, pos, d)
 		if err2 != nil {
 			return err2
 		}
@@ -211,8 +205,7 @@ func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
 			vtmp[j] = vects[i]
 			j++
 		}
-
-		etmp := &encBase{data: d, parity: dLCnt, genMatrix: g}
+		etmp := &encBase{data: d, parity: dLCnt, gen: g}
 		etmp.Encode(vtmp)
 	}
 	pLCnt := len(pLost)
@@ -229,8 +222,40 @@ func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
 			vects[p] = make([]byte, size)
 			vtmp[d+i] = vects[p]
 		}
-		etmp := &encBase{data: d, parity: pLCnt, genMatrix: g}
+		etmp := &encBase{data: d, parity: pLCnt, gen: g}
 		etmp.Encode(vtmp)
 	}
 	return nil
+}
+
+func (e *encBase) reconst(vects [][]byte, dataOnly bool) (err error) {
+	d := e.data
+	total := e.total
+	has := 0
+	k := 0
+	pos := make([]int, d)
+	dLost := make([]int, 0)
+	pLost := make([]int, 0)
+	for i := 0; i < total; i++ {
+		if vects[i] != nil {
+			has++
+			if k < d {
+				pos[k] = i
+				k++
+			}
+		} else {
+			if i < d {
+				dLost = append(dLost, i)
+			} else {
+				pLost = append(pLost, i)
+			}
+		}
+	}
+	if has == total {
+		return nil
+	}
+	if has < d {
+		return errors.New("rs.Reconst: not enough vects")
+	}
+	return e.reconstWithPos(vects, pos, dLost, pLost, dataOnly)
 }

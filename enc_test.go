@@ -30,7 +30,7 @@ func TestVerifyBaseEncodeCauchy(t *testing.T) {
 	}
 	em := genEncMatrixCauchy(d, p)
 	g := em[d*d:]
-	e := &encBase{data: d, parity: p, genMatrix: g}
+	e := &encBase{data: d, parity: p, gen: g}
 	err := e.Encode(vects)
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestVerifyBaseEncodeVand(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := em[d*d:]
-	e := &encBase{data: d, parity: p, genMatrix: g}
+	e := &encBase{data: d, parity: p, gen: g}
 	err = e.Encode(vects)
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,6 @@ func fillRandom(v []byte) {
 	}
 }
 
-//const verifySize = unitSize + 128 + 32 + 7
 const verifySize = 256 + 32 + 16 + 15
 
 func verifySIMDEnc(t *testing.T, d, p, ins int) {
@@ -142,15 +141,15 @@ func verifySIMDEnc(t *testing.T, d, p, ins int) {
 		var e EncodeReconster
 		switch ins {
 		case avx2:
-			e = &encAVX2{data: d, parity: p, genMatrix: g, tbl: tbl}
+			e = &encAVX2{data: d, parity: p, gen: g, tbl: tbl}
 		case ssse3:
-			e = &encSSSE3{data: d, parity: p, genMatrix: g, tbl: tbl}
+			e = &encSSSE3{data: d, parity: p, gen: g, tbl: tbl}
 		}
 		err = e.Encode(vects1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		eb := &encBase{data: d, parity: p, genMatrix: g}
+		eb := &encBase{data: d, parity: p, gen: g}
 		err = eb.Encode(vects2)
 		if err != nil {
 			t.Fatal(err)
@@ -264,7 +263,7 @@ func benchEncBase(b *testing.B, d, p, size int) {
 		b.Fatal(err)
 	}
 	g := em[d*d:]
-	e := &encBase{data: d, parity: p, genMatrix: g}
+	e := &encBase{data: d, parity: p, gen: g}
 	err = e.Encode(vects)
 	if err != nil {
 		b.Fatal(err)

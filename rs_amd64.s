@@ -30,10 +30,14 @@
 #define maskx X2
 #define in0x X3
 #define in0_hx X10
+#define tmp0x  X9
+#define tmp1x  X11
+#define tmp2x  X12
+#define tmp3x  X13
 
 
-// func vectMulAVX2(tbl, inV, outV []byte)
-TEXT ·vectMulAVX2(SB), NOSPLIT, $0
+// func mulVectAVX2(tbl, inV, outV []byte)
+TEXT ·mulVectAVX2(SB), NOSPLIT, $0
     MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
@@ -171,15 +175,15 @@ one16b:
 	JNE      ymm
 	RET
 
-// func vectMulPlusAVX2(tbl, inV, outV []byte)
-TEXT ·vectMulPlusAVX2(SB), NOSPLIT, $0
+// func mulVectAddAVX2(tbl, inV, outV []byte)
+TEXT ·mulVectAddAVX2(SB), NOSPLIT, $0
     MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), low_tblx
 	VMOVDQU      16(tmp0), high_tblx
 	MOVB         $0x0f, DX
-	LONG         $0x2069e3c4; WORD $0x00d2   // VPINSRB $0x00, EDX, XMM2, XMM2
+	LONG         $0x2069e3c4; WORD $0x00d2
 	VPBROADCASTB maskx, maskx
 	MOVQ         in_len+32(FP), len
 	TESTQ        $31, len
@@ -190,27 +194,8 @@ ymm:
     VINSERTI128  $1, high_tblx, high_tbl, high_tbl
     VINSERTI128  $1, maskx, mask, mask
     TESTQ        $255, len
-    JZ           aligned
-    MOVQ         len, tmp0
-    ANDQ         $255, tmp0
+    JNZ          not_aligned
 
-loop32b:
-    VMOVDQU -32(in)(len*1), in0
-	VPSRLQ  $4, in0, in0_h
-	VPAND   mask, in0_h, in0_h
-	VPAND   mask, in0, in0
-	VPSHUFB in0_h, high_tbl, in0_h
-	VPSHUFB in0, low_tbl, in0
-	VPXOR   in0, in0_h, in0
-	VPXOR   -32(out)(len*1), in0, in0
-	VMOVDQU in0, -32(out)(len*1)
-	SUBQ    $32, len
-	SUBQ    $32, tmp0
-	JG      loop32b
-	CMPQ    len, $0
-	JZ      ret
-
-// 256bytes/loop
 aligned:
     MOVQ         $0, pos
 
@@ -301,6 +286,28 @@ loop256b:
 	VZEROUPPER
 	RET
 
+not_aligned:
+    MOVQ    len, tmp0
+    ANDQ    $255, tmp0
+
+loop32b:
+    VMOVDQU -32(in)(len*1), in0
+	VPSRLQ  $4, in0, in0_h
+	VPAND   mask, in0_h, in0_h
+	VPAND   mask, in0, in0
+	VPSHUFB in0_h, high_tbl, in0_h
+	VPSHUFB in0, low_tbl, in0
+	VPXOR   in0, in0_h, in0
+	VPXOR   -32(out)(len*1), in0, in0
+	VMOVDQU in0, -32(out)(len*1)
+	SUBQ    $32, len
+	SUBQ    $32, tmp0
+	JG      loop32b
+	CMPQ    len, $256
+	JGE     aligned
+	VZEROUPPER
+	RET
+
 one16b:
     VMOVDQU  -16(in)(len*1), in0x
     VPSRLQ   $4, in0x, in0_hx
@@ -311,14 +318,10 @@ one16b:
     VPXOR    in0x, in0_hx, in0x
     VPXOR    -16(out)(len*1), in0x, in0x
 	VMOVDQU  in0x, -16(out)(len*1)
-    SUBQ     $16, len
-    CMPQ     len, $0
-   	JNE      ymm
-   	RET
-
-ret:
-    VZEROUPPER
-    RET
+	SUBQ     $16, len
+	CMPQ     len, $0
+	JNE      ymm
+	RET
 
 TEXT ·hasAVX2(SB), NOSPLIT, $0
 	XORQ AX, AX
@@ -329,3 +332,88 @@ TEXT ·hasAVX2(SB), NOSPLIT, $0
 	ANDQ $1, BX
 	MOVB BX, ret+0(FP)
 	RET
+
+// func mulVectSSSE3(tbl, inV, outV []byte)
+TEXT ·mulVectSSSE3(SB), NOSPLIT, $0
+    MOVQ    i+24(FP), in
+	MOVQ    o+48(FP), out
+	MOVQ    tbl+0(FP), tmp0
+	MOVOU   (tmp0), low_tblx
+	MOVOU   16(tmp0), high_tblx
+    MOVB    $15, tmp0
+    MOVQ    tmp0, maskx
+    PXOR    tmp0x, tmp0x
+   	PSHUFB  tmp0x, maskx
+	MOVQ    in_len+32(FP), len
+	SHRQ    $4, len
+
+loop:
+	MOVOU  (in), in0x
+	MOVOU  in0x, in0_hx
+	PSRLQ  $4, in0_hx
+	PAND   maskx, in0x
+	PAND   maskx, in0_hx
+	MOVOU  low_tblx, tmp1x
+	MOVOU  high_tblx, tmp2x
+	PSHUFB in0x, tmp1x
+	PSHUFB in0_hx, tmp2x
+	PXOR   tmp1x, tmp2x
+	MOVOU  tmp2x, (out)
+	ADDQ   $16, in
+	ADDQ   $16, out
+	SUBQ   $1, len
+	JNZ    loop
+	RET
+
+// func mulVectAddSSSE3(tbl, inV, outV []byte)
+TEXT ·mulVectAddSSSE3(SB), NOSPLIT, $0
+    MOVQ    i+24(FP), in
+	MOVQ    o+48(FP), out
+	MOVQ    tbl+0(FP), tmp0
+	MOVOU   (tmp0), low_tblx
+	MOVOU   16(tmp0), high_tblx
+    MOVB    $15, tmp0
+    MOVQ    tmp0, maskx
+    PXOR    tmp0x, tmp0x
+   	PSHUFB  tmp0x, maskx
+	MOVQ    in_len+32(FP), len
+	SHRQ    $4, len
+
+loop:
+	MOVOU  (in), in0x
+	MOVOU  in0x, in0_hx
+	PSRLQ  $4, in0_hx
+	PAND   maskx, in0x
+	PAND   maskx, in0_hx
+	MOVOU  low_tblx, tmp1x
+	MOVOU  high_tblx, tmp2x
+	PSHUFB in0x, tmp1x
+	PSHUFB in0_hx, tmp2x
+	PXOR   tmp1x, tmp2x
+	MOVOU  (out), tmp3x
+	PXOR   tmp3x, tmp2x
+	MOVOU  tmp2x, (out)
+	ADDQ   $16, in
+	ADDQ   $16, out
+	SUBQ   $1, len
+	JNZ    loop
+	RET
+
+TEXT ·hasSSSE3(SB), NOSPLIT, $0
+	XORQ AX, AX
+	INCL AX
+	CPUID
+	SHRQ $9, CX
+	ANDQ $1, CX
+	MOVB CX, ret+0(FP)
+	RET
+
+// func copy32B(dst, src []byte)
+TEXT ·copy32B(SB), NOSPLIT, $0
+    MOVQ dst+0(FP), AX
+    MOVQ src+24(FP), BX
+    MOVOU (BX), X0
+    MOVOU 16(BX), X1
+    MOVOU X0, (AX)
+    MOVOU X1, 16(AX)
+    RET
