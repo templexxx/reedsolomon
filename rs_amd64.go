@@ -63,28 +63,27 @@ type (
 	encSIMD  struct {
 		data         int
 		parity       int
-		total        int
 		encode       matrix
 		gen          matrix
 		tbl          []byte
 		enableCache  bool
 		inverseCache sync.Map
+		genCache     sync.Map
 	}
 )
 
 func newRS(d, p int, em matrix) (enc EncodeReconster) {
 	g := em[d*d:]
-	n := d + p
 	ext := getEXT()
 	if ext == none {
-		return &encBase{data: d, parity: p, total: n, encode: em, gen: g}
+		return &encBase{data: d, parity: p, encode: em, gen: g}
 	}
 	t := initTbl(g, p, d)
 	ok := okCache(d, p)
 	if ext == avx2 {
-		return &encAVX2{data: d, parity: p, total: n, encode: em, gen: g, tbl: t, enableCache: ok}
+		return &encAVX2{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok}
 	}
-	return &encSSSE3{data: d, parity: p, total: n, encode: em, gen: g, tbl: t, enableCache: ok}
+	return &encSSSE3{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok}
 }
 
 // Size of sub-vector
@@ -123,6 +122,30 @@ func (e *encAVX2) Encode(vects [][]byte) (err error) {
 			start = end
 		} else {
 			e.matrixMulRemain(start, size, dv, pv)
+			start = size
+		}
+	}
+	return
+}
+
+func (e *encAVX2) EncodeWithGen(vects [][]byte) (err error) {
+	d := e.data
+	p := e.parity
+	size, err := checkEnc(d, p, vects)
+	if err != nil {
+		return
+	}
+	dv := vects[:d]
+	pv := vects[d:]
+	start, end := 0, 0
+	do := getDo(size)
+	for start < size {
+		end = start + do
+		if end <= size {
+			e.matrixMulWithGen(start, end, dv, pv)
+			start = end
+		} else {
+			e.matrixMulRemainWithGen(start, size, dv, pv)
 			start = size
 		}
 	}
@@ -171,6 +194,56 @@ func (e *encAVX2) matrixMulRemain(start, end int, dv, pv [][]byte) {
 					mulVectAVX2(t, dv[0][start:end], pv[j][start:end])
 				}
 				off += 32
+			}
+		}
+		start = end
+	}
+	if undone > do {
+		g := e.gen
+		for i := 0; i < d; i++ {
+			for j := 0; j < p; j++ {
+				if i != 0 {
+					mulVectAdd(g[j*d+i], dv[i][start:], pv[j][start:])
+				} else {
+					mulVect(g[j*d], dv[0][start:], pv[j][start:])
+				}
+			}
+		}
+	}
+}
+
+func (e *encAVX2) matrixMulWithGen(start, end int, dv, pv [][]byte) {
+	d := e.data
+	p := e.parity
+	g := e.gen
+	for i := 0; i < d; i++ {
+		for j := 0; j < p; j++ {
+			t := lowhighTbl[g[j*d+i]][:]
+			if i != 0 {
+				mulVectAddAVX2(t, dv[i][start:end], pv[j][start:end])
+			} else {
+				mulVectAVX2(t, dv[0][start:end], pv[j][start:end])
+			}
+		}
+	}
+}
+
+func (e *encAVX2) matrixMulRemainWithGen(start, end int, dv, pv [][]byte) {
+	undone := end - start
+	do := (undone >> 4) << 4
+	d := e.data
+	p := e.parity
+	if do >= 16 {
+		end = start + do
+		g := e.gen
+		for i := 0; i < d; i++ {
+			for j := 0; j < p; j++ {
+				t := lowhighTbl[g[j*d+i]][:]
+				if i != 0 {
+					mulVectAddAVX2(t, dv[i][start:end], pv[j][start:end])
+				} else {
+					mulVectAVX2(t, dv[0][start:end], pv[j][start:end])
+				}
 			}
 		}
 		start = end
@@ -289,7 +362,7 @@ func (e *encAVX2) ReconstWithPos(vects [][]byte, pos, dLost, pLost []int) error 
 	return e.reconstWithPos(vects, pos, dLost, pLost, false)
 }
 
-func (e *encAVX2) ReconsDatatWithPos(vects [][]byte, pos, dLost []int) error {
+func (e *encAVX2) ReconstDatatWithPos(vects [][]byte, pos, dLost []int) error {
 	return e.reconstWithPos(vects, pos, dLost, nil, true)
 }
 
@@ -300,8 +373,8 @@ func (e *encAVX2) makeInverse(pos []int) (im matrix, err error) {
 		return makeInverse(em, pos, d)
 	}
 	var key uint32
-	for _, h := range pos {
-		key += 1 << uint8(h)
+	for _, p := range pos {
+		key += 1 << uint8(p)
 	}
 	v, ok := e.inverseCache.Load(key)
 	if ok {
@@ -313,6 +386,30 @@ func (e *encAVX2) makeInverse(pos []int) (im matrix, err error) {
 	}
 	e.inverseCache.Store(key, m)
 	return m, nil
+}
+
+func (e *encAVX2) makeGen(pos, dLost []int) (matrix, error) {
+	im, err := e.makeInverse(pos)
+	if err != nil {
+		return nil, err
+	}
+	
+	var key uint32
+	for _, l := range dLost {
+		key += 1 << uint8(l)
+	}
+	v, ok := e.genCache.Load(key)
+	if ok {
+		return v.(matrix), nil
+	}
+	dLCnt := len(dLost)
+	d := e.data
+	g := make([]byte, dLCnt*d)
+	for i, p := range dLost {
+		copy(g[i*d:i*d+d], im[p*d:p*d+d])
+	}
+	e.genCache.Store(key, g)
+	return g, nil
 }
 
 func (e *encAVX2) reconstWithPos(vects [][]byte, pos, dLost, pLost []int, dataOnly bool) (err error) {
@@ -345,13 +442,14 @@ func (e *encAVX2) reconstWithPos(vects [][]byte, pos, dLost, pLost []int, dataOn
 			}
 		}
 		for _, i := range dLost {
-			vects[i] = make([]byte, size)
+			if vects[i] == nil {
+				vects[i] = make([]byte, size)
+			}
 			vtmp[j] = vects[i]
 			j++
 		}
-		t := initTbl(g, dLCnt, d)
-		etmp := &encAVX2{data: d, parity: dLCnt, gen: g, tbl: t}
-		etmp.Encode(vtmp)
+		etmp := &encAVX2{data: d, parity: dLCnt, gen: g}
+		etmp.EncodeWithGen(vtmp)
 	}
 	pLCnt := len(pLost)
 	if pLCnt != 0 && !dataOnly {
@@ -364,19 +462,20 @@ func (e *encAVX2) reconstWithPos(vects [][]byte, pos, dLost, pLost []int, dataOn
 			vtmp[i] = vects[i]
 		}
 		for i, p := range pLost {
-			vects[p] = make([]byte, size)
+			if vects[p] == nil {
+				vects[p] = make([]byte, size)
+			}
 			vtmp[d+i] = vects[p]
 		}
-		t := initTbl(g, pLCnt, d)
-		etmp := &encAVX2{data: d, parity: dLCnt, gen: g, tbl: t}
-		etmp.Encode(vtmp)
+		etmp := &encAVX2{data: d, parity: pLCnt, gen: g}
+		etmp.EncodeWithGen(vtmp)
 	}
 	return nil
 }
 
 func (e *encAVX2) reconst(vects [][]byte, dataOnly bool) (err error) {
 	d := e.data
-	total := e.total
+	total := d + e.parity
 	has := 0
 	k := 0
 	pos := make([]int, d)
@@ -406,6 +505,23 @@ func (e *encAVX2) reconst(vects [][]byte, dataOnly bool) (err error) {
 	return e.reconstWithPos(vects, pos, dLost, pLost, dataOnly)
 }
 
+// TODO tmp
+func (e *encAVX2) CloseCache() {
+	e.enableCache = false
+}
+
+func (e *encAVX2) OpenCache() {
+	e.enableCache = true
+}
+
+func (e *encSSSE3) CloseCache() {
+	e.enableCache = false
+}
+
+func (e *encSSSE3) OpenCache() {
+	e.enableCache = true
+}
+
 func (e *encSSSE3) Reconstruct(vects [][]byte) (err error) {
 	return e.reconst(vects, false)
 }
@@ -418,7 +534,7 @@ func (e *encSSSE3) ReconstWithPos(vects [][]byte, pos, dLost, pLost []int) error
 	return e.reconstWithPos(vects, pos, dLost, pLost, false)
 }
 
-func (e *encSSSE3) ReconsDatatWithPos(vects [][]byte, pos, dLost []int) error {
+func (e *encSSSE3) ReconstDatatWithPos(vects [][]byte, pos, dLost []int) error {
 	return e.reconstWithPos(vects, pos, dLost, nil, true)
 }
 
@@ -497,7 +613,7 @@ func (e *encSSSE3) reconstWithPos(vects [][]byte, pos, dLost, pLost []int, dataO
 			vtmp[d+i] = vects[p]
 		}
 		t := initTbl(g, pLCnt, d)
-		etmp := &encSSSE3{data: d, parity: dLCnt, gen: g, tbl: t}
+		etmp := &encSSSE3{data: d, parity: pLCnt, gen: g, tbl: t}
 		etmp.Encode(vtmp)
 	}
 	return nil
@@ -505,7 +621,7 @@ func (e *encSSSE3) reconstWithPos(vects [][]byte, pos, dLost, pLost []int, dataO
 
 func (e *encSSSE3) reconst(vects [][]byte, dataOnly bool) (err error) {
 	d := e.data
-	total := e.total
+	total := d + e.parity
 	has := 0
 	k := 0
 	pos := make([]int, d)
