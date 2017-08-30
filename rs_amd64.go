@@ -2,6 +2,7 @@ package reedsolomon
 
 import (
 	"errors"
+	"sort"
 	"sync"
 )
 
@@ -128,13 +129,10 @@ func (e *encAVX2) Encode(vects [][]byte) (err error) {
 	return
 }
 
-func (e *encAVX2) EncodeWithGen(vects [][]byte) (err error) {
+// encodeWithGen just for reconst
+func (e *encAVX2) encodeWithGen(vects [][]byte) (err error) {
 	d := e.data
-	p := e.parity
-	size, err := checkEnc(d, p, vects)
-	if err != nil {
-		return
-	}
+	size := len(vects[0])
 	dv := vects[:d]
 	pv := vects[d:]
 	start, end := 0, 0
@@ -249,6 +247,8 @@ func (e *encAVX2) matrixMulRemainWithGen(start, end int, dv, pv [][]byte) {
 		start = end
 	}
 	if undone > do {
+		//fmt.Println("dv", dv)
+		//fmt.Println("pv", pv)
 		g := e.gen
 		for i := 0; i < d; i++ {
 			for j := 0; j < p; j++ {
@@ -389,26 +389,58 @@ func (e *encAVX2) makeInverse(pos []int) (im matrix, err error) {
 }
 
 func (e *encAVX2) makeGen(pos, dLost []int) (matrix, error) {
-	im, err := e.makeInverse(pos)
+	// 1.make genkey & inversekey
+	// 2.search genmap
+	// 3. search inversecache
+	// 4. make inverse
+	// 5. use inverse make gen
+	// 6. store inversecache gencache
+	d := e.data
+	em := e.encode
+	dLCnt := len(dLost)
+	if !e.enableCache {
+		im, err := makeInverse(em, pos, d)
+		if err != nil {
+			return nil, err
+		}
+		g := newMatrix(dLCnt, d)
+		for i, p := range dLost {
+			copy(g[i*d:i*d+d], im[p*d:p*d+d])
+		}
+		return g, nil
+	}
+	var ikey uint64
+	for _, p := range pos {
+		ikey += 1 << uint8(p)
+	}
+	gkey := ikey
+	for _, l := range pos {
+		gkey += 1 << uint8(l+32)
+	}
+	gv, ok := e.genCache.Load(gkey)
+	if ok {
+		return gv.(matrix), nil
+	}
+	v, ok := e.inverseCache.Load(ikey)
+	if ok {
+		im := v.(matrix)
+		g := newMatrix(dLCnt, d)
+		for i, p := range dLost {
+			copy(g[i*d:i*d+d], im[p*d:p*d+d])
+		}
+		e.genCache.Store(gkey, g)
+		return g, nil
+	}
+	im, err := makeInverse(em, pos, d)
 	if err != nil {
 		return nil, err
 	}
-	
-	var key uint32
-	for _, l := range dLost {
-		key += 1 << uint8(l)
-	}
-	v, ok := e.genCache.Load(key)
-	if ok {
-		return v.(matrix), nil
-	}
-	dLCnt := len(dLost)
-	d := e.data
-	g := make([]byte, dLCnt*d)
+	e.inverseCache.Store(ikey, im)
+	g := newMatrix(dLCnt, d)
 	for i, p := range dLost {
 		copy(g[i*d:i*d+d], im[p*d:p*d+d])
 	}
-	e.genCache.Store(key, g)
+	e.genCache.Store(gkey, g)
 	return g, nil
 }
 
@@ -423,36 +455,99 @@ func (e *encAVX2) reconstWithPos(vects [][]byte, pos, dLost, pLost []int, dataOn
 	em := e.encode
 	dLCnt := len(dLost)
 	if dLCnt != 0 {
-		im, err2 := e.makeInverse(pos)
+		//fmt.Println("origin", vects)
+		//im, err2 := e.makeInverse(pos)
+		//if err2 != nil {
+		//	return err2
+		//}
+		//g := make([]byte, dLCnt*d)
+		//for i, p := range dLost {
+		//	copy(g[i*d:i*d+d], im[p*d:p*d+d])
+		//}
+		//g, err2 := e.makeGen(pos, dLost)
+		//if err2 != nil {
+		//	return err2
+		//}
+		ppos := make([]int, dLCnt)
+		pc := 0
+		for _, p := range pos {
+			if pc == dLCnt {
+				break
+			}
+			if p >= d {
+				ppos[pc] = p
+				pc++
+			}
+		}
+		sort.Ints(ppos)
+		sort.Ints(dLost)
+		m := make(map[int]int)
+		newPos := make([]int, d)
+		for i := 0; i < d; i++ {
+			newPos[i] = i
+		}
+		for i, l := range dLost {
+			if vects[l] == nil {
+				vects[l] = make([]byte, size)
+			}
+			vects[l], vects[ppos[i]] = vects[ppos[i]], vects[l]
+			newPos[l] = ppos[i]
+			if ppos[i] != i+d {
+				m[ppos[i]] = i + d
+				vects[i+d], vects[ppos[i]] = vects[ppos[i]], vects[i+d]
+			}
+		}
+		g, err2 := e.makeGen(newPos, dLost)
 		if err2 != nil {
 			return err2
 		}
-		g := make([]byte, dLCnt*d)
-		for i, p := range dLost {
-			copy(g[i*d:i*d+d], im[p*d:p*d+d])
+		//fmt.Println("swap", vects)
+
+		//vtmp := make([][]byte, d+dLCnt)
+		//j := 0
+		//for i, v := range vects {
+		//	if v != nil {
+		//		if j < d {
+		//			vtmp[j] = vects[i]
+		//			j++
+		//		}
+		//	}
+		//}
+		//for _, i := range dLost {
+		//	if vects[i] == nil {
+		//		vects[i] = make([]byte, size)
+		//	}
+		//	vtmp[j] = vects[i]
+		//	j++
+		//}
+		// TODO check err2
+		etmp := &encAVX2{data: d, parity: dLCnt, gen: g}
+		err2 = etmp.encodeWithGen(vects[:d+dLCnt])
+		//err2 = etmp.encodeWithGen(vtmp)
+		if err2 != nil {
+			return err2
 		}
-		vtmp := make([][]byte, d+dLCnt)
-		j := 0
-		for i, v := range vects {
-			if v != nil {
-				if j < d {
-					vtmp[j] = vects[i]
-					j++
+		//fmt.Println("after enc", vects)
+		if dLCnt == p {
+			for i, l := range dLost {
+				vects[l], vects[ppos[i]] = vects[ppos[i]], vects[l]
+			}
+		} else {
+			for i := d + p - 1; i >= d; i-- {
+				if v, ok := m[i]; ok {
+					vects[i], vects[v] = vects[v], vects[i]
 				}
 			}
-		}
-		for _, i := range dLost {
-			if vects[i] == nil {
-				vects[i] = make([]byte, size)
+			for i, l := range dLost {
+				vects[l], vects[ppos[i]] = vects[ppos[i]], vects[l]
 			}
-			vtmp[j] = vects[i]
-			j++
 		}
-		etmp := &encAVX2{data: d, parity: dLCnt, gen: g}
-		etmp.EncodeWithGen(vtmp)
+		//fmt.Println("swapback", vects)
+
 	}
 	pLCnt := len(pLost)
 	if pLCnt != 0 && !dataOnly {
+		// TODO drop vtmp
 		g := make([]byte, pLCnt*d)
 		for i, p := range pLost {
 			copy(g[i*d:i*d+d], em[p*d:p*d+d])
@@ -467,8 +562,14 @@ func (e *encAVX2) reconstWithPos(vects [][]byte, pos, dLost, pLost []int, dataOn
 			}
 			vtmp[d+i] = vects[p]
 		}
+		//fmt.Println("reconst parity", vtmp)
 		etmp := &encAVX2{data: d, parity: pLCnt, gen: g}
-		etmp.EncodeWithGen(vtmp)
+		err2 := etmp.encodeWithGen(vtmp)
+		//fmt.Println("after parity", vtmp)
+		//fmt.Println(vects)
+		if err2 != nil {
+			return err2
+		}
 	}
 	return nil
 }
