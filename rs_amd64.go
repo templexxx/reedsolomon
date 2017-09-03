@@ -22,24 +22,6 @@ func getEXT() int {
 	}
 }
 
-// TODO del after test
-func (e *encAVX2) CloseCache() {
-	e.enableCache = false
-	return
-}
-func (e *encAVX2) OpenCache() {
-	e.enableCache = true
-	return
-}
-func (e *encSSSE3) CloseCache() {
-	e.enableCache = false
-	return
-}
-func (e *encSSSE3) OpenCache() {
-	e.enableCache = true
-	return
-}
-
 //go:noescape
 func hasAVX2() bool
 
@@ -326,14 +308,14 @@ func (e *encAVX2) ReconstDataWithPos(vects [][]byte, has, dLost []int) error {
 	return e.reconstWithPos(vects, has, dLost, nil, true)
 }
 
-func (e *encAVX2) makeGen(npos, dLost []int) (gen []byte, err error) {
+func (e *encAVX2) makeGen(has, dLost []int) (gen []byte, err error) {
 	d := e.data
 	em := e.encode
 	cnt := len(dLost)
 	if !e.enableCache {
 		matrixbuf := make([]byte, 4*d*d+cnt*d)
 		m := matrixbuf[:d*d]
-		for i, l := range npos {
+		for i, l := range has {
 			copy(m[i*d:i*d+d], em[l*d:l*d+d])
 		}
 		raw := matrixbuf[d*d : 3*d*d]
@@ -349,7 +331,7 @@ func (e *encAVX2) makeGen(npos, dLost []int) (gen []byte, err error) {
 		return g, nil
 	}
 	var ikey uint64
-	for _, p := range npos {
+	for _, p := range has {
 		ikey += 1 << uint8(p)
 	}
 	v, ok := e.inverseCache.Load(ikey)
@@ -363,7 +345,7 @@ func (e *encAVX2) makeGen(npos, dLost []int) (gen []byte, err error) {
 	}
 	matrixbuf := make([]byte, 4*d*d+cnt*d)
 	m := matrixbuf[:d*d]
-	for i, l := range npos {
+	for i, l := range has {
 		copy(m[i*d:i*d+d], em[l*d:l*d+d])
 	}
 	raw := matrixbuf[d*d : 3*d*d]
@@ -438,7 +420,6 @@ func (e *encAVX2) reconst(vects [][]byte, has, dLost, pLost []int, dataOnly bool
 func (e *encAVX2) reconstWithPos(vects [][]byte, has, dLost, pLost []int, dataOnly bool) (err error) {
 	d := e.data
 	p := e.parity
-	// TODO check more, maybe element in has show in lost & deal with len(has) > d
 	if len(has) != d {
 		return errors.New("rs.Reconst: not enough vects")
 	}
@@ -701,14 +682,14 @@ func (e *encSSSE3) ReconstDataWithPos(vects [][]byte, has, dLost []int) error {
 	return e.reconstWithPos(vects, has, dLost, nil, true)
 }
 
-func (e *encSSSE3) makeGen(npos, dLost []int) (gen []byte, err error) {
+func (e *encSSSE3) makeGen(has, dLost []int) (gen []byte, err error) {
 	d := e.data
 	em := e.encode
 	cnt := len(dLost)
 	if !e.enableCache {
 		matrixbuf := make([]byte, 4*d*d+cnt*d)
 		m := matrixbuf[:d*d]
-		for i, l := range npos {
+		for i, l := range has {
 			copy(m[i*d:i*d+d], em[l*d:l*d+d])
 		}
 		raw := matrixbuf[d*d : 3*d*d]
@@ -724,7 +705,7 @@ func (e *encSSSE3) makeGen(npos, dLost []int) (gen []byte, err error) {
 		return g, nil
 	}
 	var ikey uint64
-	for _, p := range npos {
+	for _, p := range has {
 		ikey += 1 << uint8(p)
 	}
 	v, ok := e.inverseCache.Load(ikey)
@@ -738,7 +719,7 @@ func (e *encSSSE3) makeGen(npos, dLost []int) (gen []byte, err error) {
 	}
 	matrixbuf := make([]byte, 4*d*d+cnt*d)
 	m := matrixbuf[:d*d]
-	for i, l := range npos {
+	for i, l := range has {
 		copy(m[i*d:i*d+d], em[l*d:l*d+d])
 	}
 	raw := matrixbuf[d*d : 3*d*d]

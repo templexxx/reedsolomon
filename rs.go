@@ -41,17 +41,6 @@ type EncodeReconster interface {
 	//// ReconstWithPos repair lost data with survived&lost vects position
 	//// Don't need to append position of parity lost into "lost"
 	ReconstDataWithPos(vects [][]byte, has, dLost []int) error
-	// TODO should be del after test
-	CloseCache()
-	OpenCache()
-}
-
-// TODO del after test
-func (e *encBase) CloseCache() {
-	return
-}
-func (e *encBase) OpenCache() {
-	return
 }
 
 func checkCfg(d, p int) error {

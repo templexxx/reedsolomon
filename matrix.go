@@ -86,11 +86,6 @@ func (m matrix) subMatrix(n int, r []byte) {
 	}
 }
 
-// TODO invert buf
-// buf := make([]byte, 3*size*size)
-// raw := buf[:2*size*size]
-// r := buf[2*size*size:]
-// &need another size*size buf for m
 func (m matrix) invert(raw matrix, n int, im []byte) error {
 	// [m] -> [m|I]
 	for i := 0; i < n; i++ {
@@ -120,7 +115,7 @@ var errSingular = errors.New("rs.invert: matrix is singular")
 
 // [m|I] -> [I|m']
 func gauss(m matrix, n int) error {
-	n2 := 2 * n
+	n2 := 2 *n
 	for i := 0; i < n; i++ {
 		if m[i*n2+i] == 0 {
 			for j := i + 1; j < n; j++ {
@@ -161,3 +156,4 @@ func gauss(m matrix, n int) error {
 	}
 	return nil
 }
+
