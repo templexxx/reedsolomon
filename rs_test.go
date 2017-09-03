@@ -430,6 +430,8 @@ func TestVerifyReconstWithPosAVX2(t *testing.T) {
 //}
 
 // TODO add lost parity test
+
+// TODO add lost some of data
 func BenchmarkReconst10x4x4KB_4DataCache(b *testing.B) {
 	lost := []int{0, 1, 2, 3}
 	benchReconst(b, lost, 10, 4, 4*kb, true)

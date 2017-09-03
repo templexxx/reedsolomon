@@ -6,9 +6,7 @@
 
 package reedsolomon
 
-import (
-	"errors"
-)
+import "errors"
 
 // EncodeReconster implements for Reed-Solomon Encoding/Reconstructing
 type EncodeReconster interface {
@@ -36,9 +34,9 @@ type EncodeReconster interface {
 	// then you must be sure that vects[1] vects[2] vects[3] have correct data (if the "has" is [1,2,3])
 	// the "dLost" will be [0]
 	// ps:
-	// 1. the above lists are in increasing orders
+	// 1. the above lists are in increasing orders  TODO support out-of-order
 	// 2. each vect has same len, don't set it nil
-	// so we don't need to make slice again
+	// so we don't need to make slice
 	ReconstWithPos(vects [][]byte, has, dLost, pLost []int) error
 	//// ReconstWithPos repair lost data with survived&lost vects position
 	//// Don't need to append position of parity lost into "lost"
@@ -170,33 +168,23 @@ func (e *encBase) ReconstDataWithPos(vects [][]byte, has, dLost []int) error {
 
 func (e *encBase) reconst(vects [][]byte, has, dLost, pLost []int, dataOnly bool) (err error) {
 	d := e.data
-	p := e.parity
 	em := e.encode
 	dCnt := len(dLost)
 	size := len(vects[has[0]])
 	if dCnt != 0 {
-		npos := make([]int, d)
-		for i := range npos {
-			npos[i] = i // init new position
+		vtmp := make([][]byte, d+dCnt)
+		for i, p := range has {
+			vtmp[i] = vects[p]
 		}
-		dpos := has[d-dCnt:] //  lost-data vects will be replaced by these parity
-		// lost-data need a new place if their position aren't beginning
-		// with vects[d], key:old-place value:new-place
-		dnpos := make(map[int]int)
-		for i, l := range dLost {
-			if vects[l] == nil {
-				vects[l] = make([]byte, size)
+		for i, p := range dLost {
+			if len(vects[p]) == 0 {
+				vects[p] = make([]byte, size)
 			}
-			vects[l], vects[dpos[i]] = vects[dpos[i]], vects[l]
-			npos[l] = dpos[i]
-			if dpos[i] != i+d {
-				dnpos[dpos[i]] = i + d
-				vects[i+d], vects[dpos[i]] = vects[dpos[i]], vects[i+d]
-			}
+			vtmp[i+d] = vects[p]
 		}
 		matrixbuf := make([]byte, 4*d*d+dCnt*d)
 		m := matrixbuf[:d*d]
-		for i, l := range npos {
+		for i, l := range has {
 			copy(m[i*d:i*d+d], em[l*d:l*d+d])
 		}
 		raw := matrixbuf[d*d : 3*d*d]
@@ -210,24 +198,9 @@ func (e *encBase) reconst(vects [][]byte, has, dLost, pLost []int, dataOnly bool
 			copy(g[i*d:i*d+d], im[l*d:l*d+d])
 		}
 		etmp := &encBase{data: d, parity: dCnt, gen: g}
-		err2 = etmp.Encode(vects[:d+dCnt])
+		err2 = etmp.Encode(vtmp[:d+dCnt])
 		if err2 != nil {
 			return err2
-		}
-		// swap vects back
-		if dCnt == p {
-			for i, l := range dLost {
-				vects[l], vects[dpos[i]] = vects[dpos[i]], vects[l]
-			}
-		} else {
-			for i := d + p - 1; i >= d; i-- {
-				if v, ok := dnpos[i]; ok {
-					vects[i], vects[v] = vects[v], vects[i]
-				}
-			}
-			for i, l := range dLost {
-				vects[l], vects[dpos[i]] = vects[dpos[i]], vects[l]
-			}
 		}
 	}
 	if dataOnly {
@@ -235,27 +208,24 @@ func (e *encBase) reconst(vects [][]byte, has, dLost, pLost []int, dataOnly bool
 	}
 	pCnt := len(pLost)
 	if pCnt != 0 {
+		vtmp := make([][]byte, d+pCnt)
 		g := make([]byte, pCnt*d)
 		for i, l := range pLost {
 			copy(g[i*d:i*d+d], em[l*d:l*d+d])
 		}
-		for i, l := range pLost {
-			if vects[l] == nil {
-				vects[l] = make([]byte, size)
+		for i := 0; i < d; i++ {
+			vtmp[i] = vects[i]
+		}
+		for i, p := range pLost {
+			if len(vects[p]) == 0 {
+				vects[p] = make([]byte, size)
 			}
-			if l != d+i {
-				vects[l], vects[d+i] = vects[d+i], vects[l]
-			}
+			vtmp[i+d] = vects[p]
 		}
 		etmp := &encBase{data: d, parity: pCnt, gen: g}
-		err2 := etmp.Encode(vects[:d+pCnt])
+		err2 := etmp.Encode(vtmp[:d+pCnt])
 		if err2 != nil {
 			return err2
-		}
-		for i, l := range pLost {
-			if l != d+i {
-				vects[l], vects[d+i] = vects[d+i], vects[l]
-			}
 		}
 	}
 	return
