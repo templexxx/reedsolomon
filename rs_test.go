@@ -142,7 +142,7 @@ func benchEnc(b *testing.B, d, p, size int) {
 func benchEncRun(f func(*testing.B, int, int, int), d, p int, size []int) func(*testing.B) {
 	return func(b *testing.B) {
 		for _, s := range size {
-			b.Run(fmt.Sprintf("%dx%d_%d", d, p, s), func(b *testing.B) {
+			b.Run(fmt.Sprintf("%d+%d_%d", d, p, s), func(b *testing.B) {
 				f(b, d, p, s)
 			})
 		}
@@ -196,7 +196,7 @@ func benchReconst(b *testing.B, d, p, size int, lost []int) {
 func benchReconstRun(f func(*testing.B, int, int, int, []int), d, p int, size, lost []int) func(*testing.B) {
 	return func(b *testing.B) {
 		for _, s := range size {
-			b.Run(fmt.Sprintf("%dx%d_%d", d, p, s), func(b *testing.B) {
+			b.Run(fmt.Sprintf("%d+%d_%d", d, p, s), func(b *testing.B) {
 				f(b, d, p, s, lost)
 			})
 		}
