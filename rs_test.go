@@ -26,40 +26,40 @@ func TestVerifyKAVX2(t *testing.T) {
 const verifySize = 256 + 32 + 16 + 15
 
 func verifyKEnc(t *testing.T, d, p, ins int) {
+	em, err := genEncMatrixVand(d, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := em[d*d:]
+	tbl := make([]byte, p*d*32)
+	initTbl(g, p, d, tbl)
+	var e EncodeReconster
+	switch ins {
+	case avx2:
+		e = &encAVX2{data: d, parity: p, gen: g, tbl: tbl}
+		//case ssse3:
+		//	e = &encSSSE3{data: d, parity: p, gen: g, tbl: tbl}
+	default:
+		e = &encBase{data: d, parity: p, gen: g}
+	}
 	for i := 1; i <= verifySize; i++ {
-		vects1 := make([][]byte, testNumIn+testNumOut)
-		vects2 := make([][]byte, testNumIn+testNumOut)
-		for j := 0; j < testNumIn+testNumOut; j++ {
+		vects1 := make([][]byte, d+p)
+		vects2 := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
 			vects1[j] = make([]byte, i)
 			vects2[j] = make([]byte, i)
 		}
-		for j := 0; j < testNumIn; j++ {
+		for j := 0; j < d; j++ {
 			rand.Seed(int64(j))
 			fillRandom(vects1[j])
 			copy(vects2[j], vects1[j])
-		}
-		em, err := genEncMatrixVand(testNumIn, testNumOut)
-		if err != nil {
-			t.Fatal("rs.verifySIMDEnc: ", err)
-		}
-		g := em[testNumIn*testNumIn:]
-		tbl := make([]byte, p*d*32)
-		initTbl(g, testNumOut, testNumIn, tbl)
-		var e EncodeReconster
-		switch ins {
-		case avx2:
-			e = &encAVX2{data: d, parity: p, gen: g, tbl: tbl}
-		//case ssse3:
-		//	e = &encSSSE3{data: d, parity: p, gen: g, tbl: tbl}
-		default:
-			e = &encBase{data: d, parity: p, gen: g}
 		}
 
 		err = e.Encode(vects1)
 		if err != nil {
 			t.Fatal("rs.verifySIMDEnc: ", err)
 		}
-		ek, err := krs.New(testNumIn, testNumOut)
+		ek, err := krs.New(d, p)
 		if err != nil {
 			t.Fatal(err)
 		}
