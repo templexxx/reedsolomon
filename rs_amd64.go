@@ -85,7 +85,6 @@ type (
 		// TODO add sync.pool maybe
 		enableCache  bool
 		inverseCache sync.Map
-		tblCache     sync.Map
 	}
 )
 
@@ -221,6 +220,101 @@ func (e *encAVX2) matrixMulRemain(start, end int, dv, pv [][]byte) {
 	}
 }
 
+// use generator-matrix but not tbls for encoding
+// it's design for reconstructing
+// for small vects, it cost to much time on initTbl, so drop it
+// and for big vects, the tbls can't impact much, because the cache will be filled with vects' data
+func (e *encAVX2) encodeGen(vects [][]byte) (err error) {
+	d := e.data
+	p := e.parity
+	size, err := checkEnc(d, p, vects)
+	if err != nil {
+		return
+	}
+	dv := vects[:d]
+	pv := vects[d:]
+	start, end := 0, 0
+	do := getDo(size)
+	for start < size {
+		end = start + do
+		if end <= size {
+			e.matrixMulGen(start, end, dv, pv)
+			start = end
+		} else {
+			e.matrixMulRemainGen(start, size, dv, pv)
+			start = size
+		}
+	}
+	return
+}
+
+func (e *encAVX2) matrixMulGen(start, end int, dv, pv [][]byte) {
+	d := e.data
+	p := e.parity
+	off := 0
+	g := e.gen
+	for i := 0; i < d; i++ {
+		for j := 0; j < p; j++ {
+			t := lowhighTbl[g[j*d+i]][:]
+			if i != 0 {
+				mulVectAddAVX2(t, dv[i][start:end], pv[j][start:end])
+			} else {
+				mulVectAVX2(t, dv[0][start:end], pv[j][start:end])
+			}
+			off += 1
+		}
+	}
+}
+
+func (e *encAVX2) matrixMulRemainGen(start, end int, dv, pv [][]byte) {
+	undone := end - start
+	do := (undone >> 4) << 4
+	d := e.data
+	p := e.parity
+	g := e.gen
+	if do >= 16 {
+		end2 := start + do
+		for i := 0; i < d; i++ {
+			for j := 0; j < p; j++ {
+				t := lowhighTbl[g[j*d+i]][:]
+				if i != 0 {
+					mulVectAddAVX2(t, dv[i][start:end2], pv[j][start:end2])
+				} else {
+					mulVectAVX2(t, dv[0][start:end2], pv[j][start:end2])
+				}
+			}
+		}
+		start = end
+	}
+	if undone > do {
+		start2 := end - 16
+		if start2 < 0 {
+			for i := 0; i < d; i++ {
+				for j := 0; j < p; j++ {
+					if i != 0 {
+						mulVectAdd(g[j*d+i], dv[i][start:], pv[j][start:])
+					} else {
+						mulVect(g[j*d], dv[0][start:], pv[j][start:])
+					}
+				}
+			}
+		} else {
+			off := 0
+			for i := 0; i < d; i++ {
+				for j := 0; j < p; j++ {
+					t := lowhighTbl[g[j*d+i]][:]
+					if i != 0 {
+						mulVectAddAVX2(t, dv[i][start2:end], pv[j][start2:end])
+					} else {
+						mulVectAVX2(t, dv[0][start2:end], pv[j][start2:end])
+					}
+					off += 32
+				}
+			}
+		}
+	}
+}
+
 func (e *encAVX2) Reconstruct(vects [][]byte) (err error) {
 	return e.reconstruct(vects, false)
 }
@@ -237,12 +331,11 @@ func (e *encAVX2) ReconstDataWithPos(vects [][]byte, has, dLost []int) error {
 	return e.reconstWithPos(vects, has, dLost, nil, true)
 }
 
-func (e *encAVX2) makeTbl(npos, dLost []int) (t, gen []byte, err error) {
+func (e *encAVX2) makeGen(npos, dLost []int) (gen []byte, err error) {
 	d := e.data
 	em := e.encode
 	cnt := len(dLost)
-	baseLen := d * cnt
-	matrixbuf := make([]byte, 4*d*d+cnt*d+32*cnt*d)
+	matrixbuf := make([]byte, 4*d*d+cnt*d)
 	if !e.enableCache {
 		m := matrixbuf[:d*d]
 		for i, l := range npos {
@@ -252,41 +345,26 @@ func (e *encAVX2) makeTbl(npos, dLost []int) (t, gen []byte, err error) {
 		im := matrixbuf[3*d*d : 4*d*d]
 		err2 := matrix(m).invert(raw, d, im)
 		if err2 != nil {
-			return nil, nil, err2
+			return nil, err2
 		}
-		g := matrixbuf[4*d*d : 4*d*d+cnt*d]
+		g := matrixbuf[4*d*d:]
 		for i, l := range dLost {
 			copy(g[i*d:i*d+d], im[l*d:l*d+d])
 		}
-		tbl := matrixbuf[4*d*d+cnt*d:]
-		initTbl(g, cnt, d, tbl)
-		return tbl, g, nil
+		return g, nil
 	}
 	var ikey uint64
 	for _, p := range npos {
 		ikey += 1 << uint8(p)
 	}
-	tkey := ikey
-	for _, p := range dLost {
-		tkey += 1 << uint8(p+32)
-	}
-	gt, ok := e.tblCache.Load(tkey)
-	if ok {
-		g := gt.([]byte)[:cnt*d]
-		tbl := gt.([]byte)[baseLen : baseLen+baseLen*32]
-		return tbl, g, nil
-	}
 	v, ok := e.inverseCache.Load(ikey)
 	if ok {
-		im := v.(matrix)
-		g := matrixbuf[4*d*d : 4*d*d+cnt*d]
+		im := v.([]byte)
+		g := matrixbuf[4*d*d:]
 		for i, l := range dLost {
 			copy(g[i*d:i*d+d], im[l*d:l*d+d])
 		}
-		tbl := matrixbuf[4*d*d+cnt*d:]
-		initTbl(g, cnt, d, tbl)
-		e.tblCache.Store(tkey, matrixbuf[4*d*d:])
-		return tbl, g, nil
+		return g, nil
 	}
 	m := matrixbuf[:d*d]
 	for i, l := range npos {
@@ -296,18 +374,15 @@ func (e *encAVX2) makeTbl(npos, dLost []int) (t, gen []byte, err error) {
 	im := matrixbuf[3*d*d : 4*d*d]
 	err2 := matrix(m).invert(raw, d, im)
 	if err2 != nil {
-		return nil, nil, err2
+		return nil, err2
 	}
 	e.inverseCache.Store(ikey, im)
 
-	g := matrixbuf[4*d*d : 4*d*d+cnt*d]
+	g := matrixbuf[4*d*d:]
 	for i, l := range dLost {
 		copy(g[i*d:i*d+d], im[l*d:l*d+d])
 	}
-	tbl := matrixbuf[4*d*d+cnt*d:]
-	initTbl(g, cnt, d, tbl)
-	e.tblCache.Store(tkey, matrixbuf[4*d*d:])
-	return tbl, g, nil
+	return g, nil
 }
 
 // TODO maybe don't need make lost vect, just = vects[i]
@@ -337,12 +412,12 @@ func (e *encAVX2) reconst(vects [][]byte, has, dLost, pLost []int, dataOnly bool
 				vects[i+d], vects[dpos[i]] = vects[dpos[i]], vects[i+d]
 			}
 		}
-		t, g, err2 := e.makeTbl(npos, dLost)
+		g, err2 := e.makeGen(npos, dLost)
 		if err2 != nil {
 			return
 		}
-		etmp := &encAVX2{data: d, parity: dCnt, gen: g, tbl: t}
-		err2 = etmp.Encode(vects[:d+dCnt])
+		etmp := &encAVX2{data: d, parity: dCnt, gen: g}
+		err2 = etmp.encodeGen(vects[:d+dCnt])
 		if err2 != nil {
 			return err2
 		}
@@ -368,14 +443,11 @@ func (e *encAVX2) reconst(vects [][]byte, has, dLost, pLost []int, dataOnly bool
 	}
 	pCnt := len(pLost)
 	if pCnt != 0 {
-		// TODO add parity lost sync.map
-		gt := make([]byte, pCnt*d+32*pCnt*d)
+		gt := make([]byte, pCnt*d)
 		g := gt[:pCnt*d]
 		for i, l := range pLost {
 			copy(g[i*d:i*d+d], em[l*d:l*d+d])
 		}
-		t := gt[pCnt*d:]
-		initTbl(g, pCnt, d, t)
 		for i, l := range pLost {
 			if vects[l] == nil {
 				vects[l] = make([]byte, size)
@@ -384,8 +456,8 @@ func (e *encAVX2) reconst(vects [][]byte, has, dLost, pLost []int, dataOnly bool
 				vects[l], vects[d+i] = vects[d+i], vects[l]
 			}
 		}
-		etmp := &encAVX2{data: d, parity: pCnt, gen: g, tbl: t}
-		err2 := etmp.Encode(vects[:d+pCnt])
+		etmp := &encAVX2{data: d, parity: pCnt, gen: g}
+		err2 := etmp.encodeGen(vects[:d+pCnt])
 		if err2 != nil {
 			return err2
 		}
