@@ -69,7 +69,7 @@ type (
 	}
 )
 
-func newRS(d, p int, em matrix) (enc EncodeReconster) {
+func newRS(d, p int, em matrix) (enc Encoder) {
 	g := em[d*d:]
 	ext := getEXT()
 	if ext == none {

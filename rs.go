@@ -8,8 +8,8 @@ package reedsolomon
 
 import "errors"
 
-// EncodeReconster implements for Reed-Solomon Encoding/Reconstructing
-type EncodeReconster interface {
+// Encoder implements for Reed-Solomon Encoding/Reconstructing
+type Encoder interface {
 	// Encode multiply generator-matrix with data
 	// len(vects) must be equal with num of data+parity
 	Encode(vects [][]byte) error
@@ -53,8 +53,8 @@ func checkCfg(d, p int) error {
 	return nil
 }
 
-// New create an EncodeReconster (vandermonde matrix as Encoding matrix)
-func New(data, parity int) (enc EncodeReconster, err error) {
+// New create an Encoder (vandermonde matrix as Encoding matrix)
+func New(data, parity int) (enc Encoder, err error) {
 	err = checkCfg(data, parity)
 	if err != nil {
 		return
@@ -66,8 +66,8 @@ func New(data, parity int) (enc EncodeReconster, err error) {
 	return newRS(data, parity, e), nil
 }
 
-// NewCauchy create an EncodeReconster (cauchy matrix as Generator Matrix)
-func NewCauchy(data, parity int) (enc EncodeReconster, err error) {
+// NewCauchy create an Encoder (cauchy matrix as Generator Matrix)
+func NewCauchy(data, parity int) (enc Encoder, err error) {
 	err = checkCfg(data, parity)
 	if err != nil {
 		return
