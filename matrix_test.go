@@ -95,7 +95,9 @@ func TestMatrixInvert(t *testing.T) {
 
 	for i, c := range testCases {
 		m := matrix(c.matrixData)
-		actual, actualErr := m.invert(c.cols)
+		raw := make([]byte, 2*c.cols*c.cols)
+		actual := make([]byte, c.cols*c.cols)
+		actualErr := m.invert(raw, c.cols, actual)
 		if actualErr != nil && c.ok {
 			t.Errorf("case.%d, expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
 		}
@@ -120,8 +122,11 @@ func benchmarkInvert(b *testing.B, size int) {
 	m.swap(0, size, size)
 	m.swap(1, size+1, size)
 	b.ResetTimer()
+	buf := make([]byte, 3*size*size)
+	raw := buf[:2*size*size]
+	r := buf[2*size*size:]
 	for i := 0; i < b.N; i++ {
-		_, err := matrix(m[:size*size]).invert(size)
+		err := m.invert(raw, size, r)
 		if err != nil {
 			b.Fatal(err)
 		}

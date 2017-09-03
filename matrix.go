@@ -1,39 +1,25 @@
 package reedsolomon
 
-import "errors"
+import (
+	"errors"
+)
 
 type matrix []byte
 
-func newMatrix(rows, cols int) matrix {
-	m := make([]byte, rows*cols)
-	return m
-}
-
-func genEncMatrixCauchy(data, parity int) matrix {
-	rows := data + parity
-	cols := data
-	m := newMatrix(rows, cols)
-	for i := 0; i < cols; i++ {
-		m[i*data+i] = byte(1)
+func genEncMatrixCauchy(d, p int) matrix {
+	t := d + p
+	m := make([]byte, t*d)
+	for i := 0; i < d; i++ {
+		m[i*d+i] = byte(1)
 	}
 
-	p := data * data
-	for i := cols; i < rows; i++ {
-		for j := 0; j < cols; j++ {
+	d2 := d * d
+	for i := d; i < t; i++ {
+		for j := 0; j < d; j++ {
 			d := i ^ j
 			a := inverseTbl[d]
-			m[p] = byte(a)
-			p++
-		}
-	}
-	return m
-}
-
-func genVandMatrix(rows, cols int) matrix {
-	m := newMatrix(rows, cols)
-	for i := 0; i < rows; i++ {
-		for j := 0; j < cols; j++ {
-			m[i*cols+j] = gfExp(byte(i), j)
+			m[d2] = byte(a)
+			d2++
 		}
 	}
 	return m
@@ -54,33 +40,70 @@ func gfExp(b byte, n int) byte {
 	return byte(expTbl[ret])
 }
 
-func genEncMatrixVand(data, parity int) (matrix, error) {
-	total := data + parity
-	vm := genVandMatrix(total, data)
-	top := newMatrix(data, data)
-	copy(top, vm[:data*data])
-	topI, err := top.invert(data)
+func genVandMatrix(vm []byte, t, d int) {
+	for i := 0; i < t; i++ {
+		for j := 0; j < d; j++ {
+			vm[i*d+j] = gfExp(byte(i), j)
+		}
+	}
+}
+
+func (m matrix) mul(right matrix, rows, cols int, r []byte) {
+	for i := 0; i < rows; i++ {
+		for j := 0; j < cols; j++ {
+			var v byte
+			for k := 0; k < cols; k++ {
+				v ^= gfMul(m[i*cols+k], right[k*cols+j])
+			}
+			r[i*cols+j] = v
+		}
+	}
+}
+
+func genEncMatrixVand(d, p int) (matrix, error) {
+	t := d + p
+	buf := make([]byte, (2*t+4*d)*d)
+	vm := buf[:t*d]
+	genVandMatrix(vm, t, d)
+	top := buf[t*d : (t+d)*d]
+	copy(top, vm[:d*d])
+	raw := buf[(t+d)*d : (t+3*d)*d]
+	im := buf[(t+3*d)*d : (t+4*d)*d]
+	err := matrix(top).invert(raw, d, im)
 	if err != nil {
 		return nil, err
 	}
-	return vm.mul(topI, total, data), nil
+	r := buf[(t+4*d)*d : (2*t+4*d)*d]
+	matrix(vm).mul(im, t, d, r)
+	return matrix(r), nil
 }
 
-func (m matrix) invert(n int) (matrix, error) {
-	raw := newMatrix(n, 2*n)
+// [I|m'] -> [m']
+func (m matrix) subMatrix(n int, r []byte) {
+	for i := 0; i < n; i++ {
+		off := i * n
+		copy(r[off:off+n], m[2*off+n:2*(off+n)])
+	}
+}
+
+// TODO invert buf
+// buf := make([]byte, 3*size*size)
+// raw := buf[:2*size*size]
+// r := buf[2*size*size:]
+// &need another size*size buf for m
+func (m matrix) invert(raw matrix, n int, im []byte) error {
 	// [m] -> [m|I]
 	for i := 0; i < n; i++ {
 		t := i * n
 		copy(raw[2*t:2*t+n], m[t:t+n])
 		raw[2*t+i+n] = byte(1)
 	}
-	// [m|I] -> [I|m']
-	err := raw.gauss(n, 2*n)
+	err := gauss(raw, n)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	// [I|m'] -> [m']
-	return raw.subMatrix(n), nil
+	raw.subMatrix(n, im)
+	return nil
 }
 
 func (m matrix) swap(i, j, n int) {
@@ -95,67 +118,46 @@ func gfMul(a, b byte) byte {
 
 var errSingular = errors.New("rs.invert: matrix is singular")
 
-func (m matrix) gauss(rows, cols int) error {
-	for i := 0; i < rows; i++ {
-		if m[i*cols+i] == 0 {
-			for j := i + 1; j < rows; j++ {
-				if m[j*cols+i] != 0 {
-					m.swap(i, j, cols)
+// [m|I] -> [I|m']
+func gauss(m matrix, n int) error {
+	n2 := 2 * n
+	for i := 0; i < n; i++ {
+		if m[i*n2+i] == 0 {
+			for j := i + 1; j < n; j++ {
+				if m[j*n2+i] != 0 {
+					m.swap(i, j, n2)
 					break
 				}
 			}
 		}
-		if m[i*cols+i] == 0 {
+		if m[i*n2+i] == 0 {
 			return errSingular
 		}
-		if m[i*cols+i] != 1 {
-			d := m[i*cols+i]
+		if m[i*n2+i] != 1 {
+			d := m[i*n2+i]
 			scale := inverseTbl[d]
-			for c := 0; c < cols; c++ {
-				m[i*cols+c] = gfMul(m[i*cols+c], scale)
+			for c := 0; c < n2; c++ {
+				m[i*n2+c] = gfMul(m[i*n2+c], scale)
 			}
 		}
-		for j := i + 1; j < rows; j++ {
-			if m[j*cols+i] != 0 {
-				scale := m[j*cols+i]
-				for c := 0; c < cols; c++ {
-					m[j*cols+c] ^= gfMul(scale, m[i*cols+c])
+		for j := i + 1; j < n; j++ {
+			if m[j*n2+i] != 0 {
+				scale := m[j*n2+i]
+				for c := 0; c < n2; c++ {
+					m[j*n2+c] ^= gfMul(scale, m[i*n2+c])
 				}
 			}
 		}
 	}
-	for k := 0; k < rows; k++ {
+	for k := 0; k < n; k++ {
 		for j := 0; j < k; j++ {
-			if m[j*cols+k] != 0 {
-				scale := m[j*cols+k]
-				for c := 0; c < cols; c++ {
-					m[j*cols+c] ^= gfMul(scale, m[k*cols+c])
+			if m[j*n2+k] != 0 {
+				scale := m[j*n2+k]
+				for c := 0; c < n2; c++ {
+					m[j*n2+c] ^= gfMul(scale, m[k*n2+c])
 				}
 			}
 		}
 	}
 	return nil
-}
-
-func (m matrix) mul(right matrix, rows, cols int) matrix {
-	r := newMatrix(rows, cols)
-	for i := 0; i < rows; i++ {
-		for j := 0; j < cols; j++ {
-			var v byte
-			for k := 0; k < cols; k++ {
-				v ^= gfMul(m[i*cols+k], right[k*cols+j])
-			}
-			r[i*cols+j] = v
-		}
-	}
-	return r
-}
-
-func (m matrix) subMatrix(n int) matrix {
-	r := newMatrix(n, n)
-	for i := 0; i < n; i++ {
-		off := i * n
-		copy(r[off:off+n], m[2*off+n:2*(off+n)])
-	}
-	return r
 }

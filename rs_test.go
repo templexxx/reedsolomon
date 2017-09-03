@@ -5,8 +5,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"fmt"
-
 	krs "github.com/klauspost/reedsolomon"
 )
 
@@ -17,98 +15,13 @@ const (
 	testNumOut = 4
 )
 
-//func TestSwap(t *testing.T) {
-//	vects := make([][]byte, testNumIn+testNumOut)
-//	for j := 0; j < testNumIn+testNumOut; j++ {
-//		vects[j] = make([]byte, 1)
-//		rand.Seed(int64(j))
-//		fillRandom(vects[j])
-//	}
-//	pos := []int{9, 8, 0, 1, 11, 13, 5, 4, 6, 2}
-//	dLost := []int{3, 7}
-//	fmt.Println(vects)
-//	swap2(vects, pos, dLost, 10, 4)
-//}
+func TestVerifyKBase(t *testing.T) {
+	verifyKEnc(t, testNumIn, testNumOut, none)
+}
 
-//func swap2(vects [][]byte, pos, dLost []int, d, p int) {
-//	order := make([]int, len(vects))
-//	for i := 0; i < len(vects); i++ {
-//		order[i] = i
-//	}
-//	ppos := make([]int, len(dLost))
-//	pc := 0
-//	for _, p := range pos {
-//		if pc == len(dLost) {
-//			break
-//		}
-//		if p >= d {
-//			ppos[pc] = p
-//			pc++
-//		}
-//	}
-//	sort.Ints(ppos)
-//	sort.Ints(dLost)
-//	m := make(map[int]int)
-//
-//	for i, l := range dLost {
-//
-//		order[l], order[ppos[i]] = order[ppos[i]], order[l]
-//		vects[l], vects[ppos[i]] = vects[ppos[i]], vects[l]
-//		if ppos[i] != i+d {
-//			m[ppos[i]] = i + d
-//			order[i+d], order[ppos[i]] = order[ppos[i]], order[i+d]
-//			vects[i+d], vects[ppos[i]] = vects[ppos[i]], vects[i+d]
-//		}
-//	}
-//	fmt.Println("after fill data", order)
-//	fmt.Println("after fill data", vects)
-//	if len(dLost) == p {
-//		for i, l := range dLost {
-//			order[l], order[ppos[i]] = order[ppos[i]], order[l]
-//			vects[l], vects[ppos[i]] = vects[ppos[i]], vects[l]
-//		}
-//		//swapback(order, d, len(dLost))
-//		fmt.Println("back", order)
-//		fmt.Println("back", vects)
-//		return
-//	}
-//	//done := 0
-//	//for i := d; i < len(order); i++ {
-//	//	if done == len(dLost) {
-//	//		break
-//	//	}
-//	//	if order[i] >= d {
-//	//		for j := i + 1; j < len(order); j++ {
-//	//			if order[j] < d {
-//	//				m[j] = i
-//	//				order[i], order[j] = order[j], order[i]
-//	//				vects[i], vects[j] = vects[j], vects[i]
-//	//				done++
-//	//				break
-//	//			}
-//	//		}
-//	//	}
-//	//}
-//	//fmt.Println("now can calc lost", order)
-//	//fmt.Println("now can calc lost", vects)
-//	fmt.Println(m)
-//	for i := len(vects) - 1; i >= d; i-- {
-//		if v, ok := m[i]; ok {
-//			order[i], order[v] = order[v], order[i]
-//			vects[i], vects[v] = vects[v], vects[i]
-//		}
-//	}
-//
-//	fmt.Println("after map", order)
-//	fmt.Println("after map", vects)
-//	for i, l := range dLost {
-//		order[l], order[ppos[i]] = order[ppos[i]], order[l]
-//		vects[l], vects[ppos[i]] = vects[ppos[i]], vects[l]
-//	}
-//	//swapback(order, d, len(dLost))
-//	fmt.Println("back", order)
-//	fmt.Println("back", vects)
-//}
+func TestVerifyKAVX2(t *testing.T) {
+	verifyKEnc(t, testNumIn, testNumOut, avx2)
+}
 
 const verifySize = 256 + 32 + 16 + 15
 
@@ -130,16 +43,18 @@ func verifyKEnc(t *testing.T, d, p, ins int) {
 			t.Fatal("rs.verifySIMDEnc: ", err)
 		}
 		g := em[testNumIn*testNumIn:]
-		tbl := initTbl(g, testNumOut, testNumIn)
+		tbl := make([]byte, p*d*32)
+		initTbl(g, testNumOut, testNumIn, tbl)
 		var e EncodeReconster
 		switch ins {
 		case avx2:
 			e = &encAVX2{data: d, parity: p, gen: g, tbl: tbl}
-		case ssse3:
-			e = &encSSSE3{data: d, parity: p, gen: g, tbl: tbl}
+		//case ssse3:
+		//	e = &encSSSE3{data: d, parity: p, gen: g, tbl: tbl}
 		default:
 			e = &encBase{data: d, parity: p, gen: g}
 		}
+
 		err = e.Encode(vects1)
 		if err != nil {
 			t.Fatal("rs.verifySIMDEnc: ", err)
@@ -165,20 +80,6 @@ func verifyKEnc(t *testing.T, d, p, ins int) {
 			}
 		}
 	}
-}
-
-func TestVerifyKAVX2(t *testing.T) {
-	if !hasAVX2() {
-		t.Fatal("rs.TestVerifyAVX2: no AVX2")
-	}
-	verifyKEnc(t, testNumIn, testNumOut, avx2)
-}
-
-func TestVerifyKSSSE3(t *testing.T) {
-	if !hasAVX2() {
-		t.Fatal("rs.TestVerifyAVX2: no SSSE3")
-	}
-	verifyKEnc(t, testNumIn, testNumOut, ssse3)
 }
 
 func TestVerifyEncBaseCauchy(t *testing.T) {
@@ -264,19 +165,6 @@ func TestVerifyEncBaseVand(t *testing.T) {
 
 // TODO add verify Enc
 
-func TestVerifyInitTbl(t *testing.T) {
-	g := []byte{17, 34, 23, 211}
-	expect := make([]byte, 4*32)
-	copy(expect[:32], lowhighTbl[17][:])
-	copy(expect[32:64], lowhighTbl[23][:])
-	copy(expect[64:96], lowhighTbl[34][:])
-	copy(expect[96:128], lowhighTbl[211][:])
-	tbl := initTbl(g, 2, 2)
-	if !bytes.Equal(expect, tbl) {
-		t.Fatal("mismatch")
-	}
-}
-
 func fillRandom(v []byte) {
 	for i := 0; i < len(v); i += 7 {
 		val := rand.Int63()
@@ -296,26 +184,25 @@ func benchEnc(b *testing.B, d, p, size int) {
 		rand.Seed(int64(j))
 		fillRandom(vects[j])
 	}
-	//e, _ := New(d, p)
-	em := genEncMatrixCauchy(d, p)
-	g := em[d*d:]
-	e := &encAVX2{data: d, parity: p, gen: g}
-	//err := e.Encode(vects)
-	err := e.encodeWithGen(vects)
+	e, err := New(d, p)
+	if err != nil {
+		b.Fatal(err)
+	}
+	err = e.Encode(vects)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.SetBytes(int64(d * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err = e.encodeWithGen(vects)
-		//	err = e.Encode(vects)
+		err = e.Encode(vects)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
+// TODO learn test from map_test
 func BenchmarkEnc10x4_4KB(b *testing.B) {
 	benchEnc(b, testNumIn, testNumOut, 4*kb)
 }
@@ -335,6 +222,38 @@ func BenchmarkEnc10x4_16M(b *testing.B) {
 func BenchmarkEnc10x4_1400B(b *testing.B) {
 	benchEnc(b, testNumIn, testNumOut, 1400)
 }
+
+func BenchmarkEncLittle10x4_1280B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1280)
+}
+func BenchmarkEncLittle10x4_1281B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1281)
+}
+func BenchmarkEncLittle10x4_1282B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1282)
+}
+func BenchmarkEncLittle10x4_1283B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1283)
+}
+func BenchmarkEncLittle10x4_1284B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1284)
+}
+func BenchmarkEncLittle10x4_1285B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1285)
+}
+func BenchmarkEncLittle10x4_1286B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1286)
+}
+func BenchmarkEncLittle10x4_1287B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1287)
+}
+func BenchmarkEncLittle10x4_1288B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1288)
+}
+func BenchmarkEncLittle10x4_1289B(b *testing.B) {
+	benchEnc(b, testNumIn, testNumOut, 1289)
+}
+
 func BenchmarkEnc10x3_1350B(b *testing.B) {
 	benchEnc(b, testNumIn, 3, 1350)
 }
@@ -386,6 +305,130 @@ func TestVerifyReconstBase(t *testing.T) {
 	}
 }
 
+func verifyReconst(t *testing.T, d, p, ins int) {
+	for i := 1; i <= verifySize; i++ {
+		vects1 := make([][]byte, d+p)
+		vects2 := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
+			vects1[j] = make([]byte, i)
+			vects2[j] = make([]byte, i)
+		}
+		for j := 0; j < d; j++ {
+			rand.Seed(int64(j))
+			fillRandom(vects1[j])
+			copy(vects2[j], vects1[j])
+		}
+		em, err := genEncMatrixVand(d, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g := em[d*d:]
+		tbl := make([]byte, p*d*32)
+		initTbl(g, p, d, tbl)
+		var e EncodeReconster
+		switch ins {
+		case avx2:
+			e = &encAVX2{data: d, parity: p, gen: g, tbl: tbl, encode: em}
+			//case ssse3:
+			//	e = &encSSSE3{data: d, parity: p, gen: g, tbl: tbl}
+		default:
+			e = &encBase{data: d, parity: p, gen: g, encode: em}
+		}
+		err = e.Encode(vects1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := 0; j < d+p; j++ {
+			copy(vects2[j], vects1[j])
+		}
+		lost := []int{11, 6, 2, 0}
+		for _, i := range lost {
+			vects2[i] = nil
+		}
+		err = e.Reconstruct(vects2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for k, v1 := range vects1 {
+			if !bytes.Equal(v1, vects2[k]) {
+				exts := "none"
+				t.Fatalf("%s no match reconst; vect: %d; size: %d", exts, k, i)
+			}
+		}
+	}
+}
+
+//
+func TestVerifyReconstNone(t *testing.T) {
+	verifyReconst(t, testNumIn, testNumOut, none)
+}
+
+func verifyReconstWithPos(t *testing.T, d, p, ins int) {
+	for i := 1; i <= verifySize; i++ {
+		vects1 := make([][]byte, d+p)
+		vects2 := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
+			vects1[j] = make([]byte, i)
+			vects2[j] = make([]byte, i)
+		}
+		for j := 0; j < d; j++ {
+			rand.Seed(int64(j))
+			fillRandom(vects1[j])
+			copy(vects2[j], vects1[j])
+		}
+		em, err := genEncMatrixVand(d, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g := em[d*d:]
+		tbl := make([]byte, p*d*32)
+		initTbl(g, p, d, tbl)
+		var e EncodeReconster
+		switch ins {
+		case avx2:
+			e = &encAVX2{data: d, parity: p, gen: g, tbl: tbl, encode: em}
+			//case ssse3:
+			//	e = &encSSSE3{data: d, parity: p, gen: g, tbl: tbl}
+		default:
+			e = &encBase{data: d, parity: p, gen: g, encode: em}
+		}
+		err = e.Encode(vects1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dLost := []int{0, 1, 7}
+		pLost := []int{12}
+		has := []int{2, 3, 4, 5, 6, 8, 9, 10, 11, 13}
+		for j := 0; j < d+p; j++ {
+			copy(vects2[j], vects1[j])
+		}
+		err = e.ReconstWithPos(vects2, has, dLost, pLost)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for k, v1 := range vects1 {
+			if !bytes.Equal(v1, vects2[k]) {
+				exts := "none"
+				t.Fatalf("%s no match reconst; vect: %d; size: %d", exts, k, i)
+			}
+		}
+	}
+}
+
+//
+func TestVerifyReconstWithPosBase(t *testing.T) {
+	verifyReconstWithPos(t, testNumIn, testNumOut, none)
+}
+
+func TestVerifyReconstWithPosAVX2(t *testing.T) {
+	verifyReconstWithPos(t, testNumIn, testNumOut, avx2)
+}
+
+//func TestVerifySSSE3Reconst(t *testing.T) {
+//	verifySIMDReconst(t, testNumIn, testNumOut, ssse3)
+//}
+
+// TODO add lost parity test
 func BenchmarkReconst10x4x4KB_4DataCache(b *testing.B) {
 	lost := []int{0, 1, 2, 3}
 	benchReconst(b, lost, 10, 4, 4*kb, true)
@@ -436,6 +479,7 @@ func BenchmarkReconst10x3x1350B_4DataNoCache(b *testing.B) {
 	benchReconst(b, lost, 10, 3, 1350, false)
 }
 
+// TODO add reconst
 func benchReconst(b *testing.B, lost []int, d, p, size int, cache bool) {
 	vects := make([][]byte, d+p)
 	for j := 0; j < d+p; j++ {
@@ -456,118 +500,126 @@ func benchReconst(b *testing.B, lost []int, d, p, size int, cache bool) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	pos := make([]int, d)
-	dLost := make([]int, 0)
-	pLost := make([]int, 0)
-	for _, l := range lost {
-		if l < d {
-			dLost = append(dLost, l)
-		} else {
-			pLost = append(pLost, l)
-		}
+	for _, i := range lost {
+		vects[i] = nil
 	}
-	cnt := 0
-	for i := 0; i < d+p; i++ {
-		ok := true
-		for _, l := range lost {
-			if i == l {
-				ok = false
-			}
-		}
-		if ok {
-			pos[cnt] = i
-			cnt++
-		}
+	err = e.Reconstruct(vects)
+	if err != nil {
+		b.Fatal(err)
 	}
 	b.SetBytes(int64(d * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err = e.ReconstWithPos(vects, pos, dLost, pLost)
+		for _, i := range lost {
+			vects[i] = nil
+		}
+		err = e.Reconstruct(vects)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-//
-func verifySIMDReconst(t *testing.T, d, p, ins int) {
-	for i := 1; i <= verifySize; i++ {
-		vects1 := make([][]byte, d+p)
-		vects2 := make([][]byte, d+p)
-		for j := 0; j < d+p; j++ {
-			vects1[j] = make([]byte, i)
-			vects2[j] = make([]byte, i)
-		}
-		for j := 0; j < d; j++ {
-			rand.Seed(int64(j))
-			fillRandom(vects1[j])
-			copy(vects2[j], vects1[j])
-		}
-		em, err := genEncMatrixVand(d, p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		g := em[d*d:]
-		tbl := initTbl(g, p, d)
-		var e EncodeReconster
-		switch ins {
-		case avx2:
-			e = &encAVX2{data: d, parity: p, encode: em, gen: g, tbl: tbl, enableCache: true}
-		case ssse3:
-			e = &encSSSE3{data: d, parity: p, encode: em, gen: g, tbl: tbl, enableCache: true}
-		}
-		//e = &encBase{data: d, parity: p, gen: g, encode: em}
-		err = e.Encode(vects1)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for j := 0; j < d+p; j++ {
-			copy(vects2[j], vects1[j])
-		}
-		lost := []int{11, 6, 2, 0}
-		for _, i := range lost {
-			vects2[i] = nil
-		}
-		err = e.Reconstruct(vects2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		//fmt.Println("expect", vects1)
-		for k, v1 := range vects1 {
-			if !bytes.Equal(v1, vects2[k]) {
-				var ext string
-				switch ins {
-				case avx2:
-					ext = "avx2"
-				case ssse3:
-					ext = "ssse3"
-				}
-				t.Fatalf("%s no match reconst; vect: %d; size: %d", ext, k, i)
-			}
-		}
+func BenchmarkReconstPos10x4x4KB_4DataCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 8, 9, 10, 11, 12, 13}
+	dLost := []int{2, 4, 5, 7}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 4, 4*kb, true)
+}
+
+func BenchmarkReconstPos10x4x4KB_4DataNoCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 8, 9, 10, 11, 12, 13}
+	dLost := []int{2, 4, 5, 7}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 4, 4*kb, false)
+}
+
+func BenchmarkReconstPos10x4x64KB_4DataCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 8, 9, 10, 11, 12, 13}
+	dLost := []int{2, 4, 5, 7}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 4, 64*kb, true)
+}
+
+func BenchmarkReconstPos10x4x64KB_4DataNoCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 8, 9, 10, 11, 12, 13}
+	dLost := []int{2, 4, 5, 7}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 4, 64*kb, false)
+}
+
+func BenchmarkReconstPos10x4x1M_4DataCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 8, 9, 10, 11, 12, 13}
+	dLost := []int{2, 4, 5, 7}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 4, mb, true)
+}
+
+func BenchmarkReconstPos10x4x1M_4DataNoCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 8, 9, 10, 11, 12, 13}
+	dLost := []int{2, 4, 5, 7}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 4, mb, false)
+}
+
+func BenchmarkReconstPos10x4x16m_4DataCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 8, 9, 10, 11, 12, 13}
+	dLost := []int{2, 4, 5, 7}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 4, 16*mb, true)
+}
+
+func BenchmarkReconstPos10x4x16m_4DataNoCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 8, 9, 10, 11, 12, 13}
+	dLost := []int{2, 4, 5, 7}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 4, 16*mb, false)
+}
+
+func BenchmarkReconstPos10x3x1350B_4DataCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 7, 8, 9, 10, 11, 12}
+	dLost := []int{2, 4, 5}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 3, 1350, true)
+}
+
+func BenchmarkReconstPos10x3x1350B_4DataNoCache(b *testing.B) {
+	has := []int{0, 1, 3, 6, 7, 8, 9, 10, 11, 12}
+	dLost := []int{2, 4, 5}
+	var pLost []int
+	benchReconstWithPos(b, has, dLost, pLost, 10, 3, 1350, false)
+}
+
+func benchReconstWithPos(b *testing.B, has, dLost, pLost []int, d, p, size int, cache bool) {
+	vects := make([][]byte, d+p)
+	for j := 0; j < d+p; j++ {
+		vects[j] = make([]byte, size)
 	}
-}
-
-//
-func TestVerifyAVX2Reconst(t *testing.T) {
-	verifySIMDReconst(t, testNumIn, testNumOut, avx2)
-}
-
-func TestVerifySSSE3Reconst(t *testing.T) {
-	verifySIMDReconst(t, testNumIn, testNumOut, ssse3)
-}
-
-//func TestCorrupt(t *testing.T) {
-//	vects := make([][]byte, 14)
-//	corruptRandom(vects, 10, 4)
-//}
-
-func corruptRandom(shards [][]byte, dataShards, parityShards int) {
-	shardsToCorrupt := rand.Intn(parityShards)
-	fmt.Println(shardsToCorrupt)
-	for i := 1; i <= shardsToCorrupt; i++ {
-		k := rand.Intn(dataShards + parityShards)
-		fmt.Println(k)
-		shards[k] = nil
+	for j := 0; j < d; j++ {
+		rand.Seed(int64(j))
+		fillRandom(vects[j])
+	}
+	e, err := New(d, p)
+	if err != nil {
+		b.Fatal(err)
+	}
+	if !cache {
+		e.CloseCache()
+	}
+	err = e.Encode(vects)
+	if err != nil {
+		b.Fatal(err)
+	}
+	err = e.ReconstWithPos(vects, has, dLost, pLost)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.SetBytes(int64(d * size))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = e.ReconstWithPos(vects, has, dLost, pLost)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }

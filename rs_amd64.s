@@ -36,7 +36,7 @@
 #define tmp3x  X13
 
 
-// func mulVectAVX2(tbl, inV, outV []byte)
+// func mulVectAVX2(tbl, d, p []byte)
 TEXT ·mulVectAVX2(SB), NOSPLIT, $0
     MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
@@ -175,7 +175,7 @@ one16b:
 	JNE      ymm
 	RET
 
-// func mulVectAddAVX2(tbl, inV, outV []byte)
+// func mulVectAddAVX2(tbl, d, p []byte)
 TEXT ·mulVectAddAVX2(SB), NOSPLIT, $0
     MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
@@ -200,7 +200,7 @@ aligned:
     MOVQ         $0, pos
 
 loop256b:
-	VMOVDQU (in)(pos*1), in0
+    VMOVDQU (in)(pos*1), in0
 	VPSRLQ  $4, in0, in0_h
 	VPAND   mask, in0_h, in0_h
 	VPAND   mask, in0, in0
@@ -333,7 +333,7 @@ TEXT ·hasAVX2(SB), NOSPLIT, $0
 	MOVB BX, ret+0(FP)
 	RET
 
-// func mulVectSSSE3(tbl, inV, outV []byte)
+// func mulVectSSSE3(tbl, d, p []byte)
 TEXT ·mulVectSSSE3(SB), NOSPLIT, $0
     MOVQ    i+24(FP), in
 	MOVQ    o+48(FP), out
@@ -365,7 +365,7 @@ loop:
 	JNZ    loop
 	RET
 
-// func mulVectAddSSSE3(tbl, inV, outV []byte)
+// func mulVectAddSSSE3(tbl, d, p []byte)
 TEXT ·mulVectAddSSSE3(SB), NOSPLIT, $0
     MOVQ    i+24(FP), in
 	MOVQ    o+48(FP), out
