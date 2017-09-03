@@ -12,7 +12,7 @@ import (
 // set deg here
 const deg = 8 // <= 8
 
-type polynomial [deg + 1]uint8
+type polynomial [deg + 1]byte
 
 func main() {
 	f, err := os.OpenFile("tables", os.O_WRONLY|os.O_CREATE, 0666)
@@ -43,25 +43,39 @@ func main() {
 
 	lenExpTable := (1 << deg) - 1
 	expTable := genExpTable(primitivePolynomial, lenExpTable)
-	body = fmt.Sprintf("expTable: %#v\n", expTable)
+	body = fmt.Sprintf("expTbl: %#v\n", expTable)
 	outputWriter.WriteString(body)
 
 	logTable := genLogTable(expTable)
-	body = fmt.Sprintf("logTable: %#v\n", logTable)
+	body = fmt.Sprintf("logTbl: %#v\n", logTable)
 	outputWriter.WriteString(body)
 
 	mulTable := genMulTable(expTable, logTable)
-	body = fmt.Sprintf("mulTable: %#v\n", mulTable)
+	body = fmt.Sprintf("mulTbl: %#v\n", mulTable)
 	outputWriter.WriteString(body)
 
 	lowTable, highTable := genMulTableHalf(mulTable)
-	body = fmt.Sprintf("lowTable: %#v\n", lowTable)
+	body = fmt.Sprintf("lowTbl: %#v\n", lowTable)
 	outputWriter.WriteString(body)
-	body = fmt.Sprintf("highTable: %#v\n", highTable)
+	body = fmt.Sprintf("highTbl: %#v\n", highTable)
+	outputWriter.WriteString(body)
+
+	var combTable [256][32]byte
+	for i := range combTable {
+		l := lowTable[i]
+		for j := 0; j < 16; j++ {
+			combTable[i][j] = l[j]
+		}
+		h := highTable[i][:]
+		for k := 16; k < 32; k++ {
+			combTable[i][k] = h[k-16]
+		}
+	}
+	body = fmt.Sprintf("lowhighTbl: %#v\n", combTable)
 	outputWriter.WriteString(body)
 
 	inverseTable := genInverseTable(mulTable)
-	body = fmt.Sprintf("inverseTable: %#v\n", inverseTable)
+	body = fmt.Sprintf("inverseTbl: %#v\n", inverseTable)
 	outputWriter.WriteString(body)
 	outputWriter.Flush()
 }
@@ -205,15 +219,20 @@ func genMulTable(expTable, logTable []byte) [256][256]byte {
 func genMulTableHalf(mulTable [256][256]byte) (low [256][16]byte, high [256][16]byte) {
 	for a := range low {
 		for b := range low {
-			result := 0
+			//result := 0
+			var result byte
 			if !(a == 0 || b == 0) {
-				result = int(mulTable[a][b])
+				//result = int(mulTable[a][b])
+				result = mulTable[a][b]
+
 			}
+			// b & 00001111, [0,15]
 			if (b & 0xf) == b {
-				low[a][b] = byte(result)
+				low[a][b] = result
 			}
+			// b & 11110000, [240,255]
 			if (b & 0xf0) == b {
-				high[a][b>>4] = byte(result)
+				high[a][b>>4] = result
 			}
 		}
 	}

@@ -29,3 +29,12 @@ cpu.out
 mathtool/galois/
 mathtool/matrix/
 mem.out
+/examples/
+/.DS_Store
+/mathtool/cntinverse
+/invert
+/bakcup
+/buf.svg
+*.svg
+*.out
+/escape
