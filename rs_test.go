@@ -15,6 +15,7 @@ const (
 	testNumOut = 4
 )
 
+// TODO drop all AVX2 combine them
 func TestVerifyKBase(t *testing.T) {
 	verifyKEnc(t, testNumIn, testNumOut, none)
 }
