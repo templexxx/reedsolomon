@@ -1,8 +1,6 @@
 package reedsolomon
 
-import (
-	"errors"
-)
+import "errors"
 
 type matrix []byte
 
@@ -115,7 +113,7 @@ var errSingular = errors.New("rs.invert: matrix is singular")
 
 // [m|I] -> [I|m']
 func gauss(m matrix, n int) error {
-	n2 := 2 *n
+	n2 := 2 * n
 	for i := 0; i < n; i++ {
 		if m[i*n2+i] == 0 {
 			for j := i + 1; j < n; j++ {
@@ -156,4 +154,3 @@ func gauss(m matrix, n int) error {
 	}
 	return nil
 }
-
