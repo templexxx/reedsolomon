@@ -611,9 +611,9 @@ func (e *encSSSE3) matrixMulGen(start, end int, dv, pv [][]byte) {
 		for j := 0; j < p; j++ {
 			t := lowhighTbl[g[j*d+i]][:]
 			if i != 0 {
-				mulVectAddAVX2(t, dv[i][start:end], pv[j][start:end])
+				mulVectAddSSSE3(t, dv[i][start:end], pv[j][start:end])
 			} else {
-				mulVectAVX2(t, dv[0][start:end], pv[j][start:end])
+				mulVectSSSE3(t, dv[0][start:end], pv[j][start:end])
 			}
 		}
 	}
@@ -631,9 +631,9 @@ func (e *encSSSE3) matrixMulRemainGen(start, end int, dv, pv [][]byte) {
 			for j := 0; j < p; j++ {
 				t := lowhighTbl[g[j*d+i]][:]
 				if i != 0 {
-					mulVectAddAVX2(t, dv[i][start:end2], pv[j][start:end2])
+					mulVectAddSSSE3(t, dv[i][start:end2], pv[j][start:end2])
 				} else {
-					mulVectAVX2(t, dv[0][start:end2], pv[j][start:end2])
+					mulVectSSSE3(t, dv[0][start:end2], pv[j][start:end2])
 				}
 			}
 		}
@@ -646,9 +646,9 @@ func (e *encSSSE3) matrixMulRemainGen(start, end int, dv, pv [][]byte) {
 				for j := 0; j < p; j++ {
 					t := lowhighTbl[g[j*d+i]][:]
 					if i != 0 {
-						mulVectAddAVX2(t, dv[i][start2:end], pv[j][start2:end])
+						mulVectAddSSSE3(t, dv[i][start2:end], pv[j][start2:end])
 					} else {
-						mulVectAVX2(t, dv[0][start2:end], pv[j][start2:end])
+						mulVectSSSE3(t, dv[0][start2:end], pv[j][start2:end])
 					}
 				}
 			}
