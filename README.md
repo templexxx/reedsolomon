@@ -1,6 +1,6 @@
 # Reed-Solomon
 
-[![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][9]][10]
+[![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] 
 
 [1]: https://godoc.org/github.com/templexxx/reedsolomon?status.svg
 [2]: https://godoc.org/github.com/templexxx/reedsolomon
@@ -10,8 +10,6 @@
 [6]: https://travis-ci.org/templexxx/reedsolomon
 [7]: https://goreportcard.com/badge/github.com/templexxx/reedsolomon
 [8]: https://goreportcard.com/report/github.com/templexxx/reedsolomon
-[9]: https://codecov.io/gh/templexxx/reedsolomon/branch/master/graph/badge.svg
-[10]: https://codecov.io/gh/templexxx/reedsolomon
 
 
 ## Introduction:

@@ -6,7 +6,4 @@ install:
     - go get github.com/templexxx/reedsolomon
 
 script:
-    - - go test -v -coverprofile=coverage.txt -covermode=atomic
-
-after_success:
-  - bash <(curl -s https://codecov.io/bash)
+    - go test -v
