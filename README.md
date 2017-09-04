@@ -1,5 +1,19 @@
 # Reed-Solomon
 
+[![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][9]][10]
+
+[1]: https://godoc.org/github.com/templexxx/reedsolomon?status.svg
+[2]: https://godoc.org/github.com/templexxx/reedsolomon
+[3]: https://img.shields.io/badge/license-MIT-blue.svg
+[4]: LICENSE
+[5]: https://travis-ci.org/templexxx/reedsolomon.svg?branch=master
+[6]: https://travis-ci.org/templexxx/reedsolomon
+[7]: https://goreportcard.com/badge/github.com/templexxx/reedsolomon
+[8]: https://goreportcard.com/report/github.com/templexxx/reedsolomon
+[9]: https://codecov.io/gh/templexxx/reedsolomon/branch/master/graph/badge.svg
+[10]: https://codecov.io/gh/templexxx/reedsolomon
+
+
 ## Introduction:
 1.  Reed-Solomon Erasure Code engine in pure Go.
 2.  Super Fast: more than 10GB/s per physics core ( 10+4, 4KB per vector, Macbook Pro 2.8 GHz Intel Core i7 )
