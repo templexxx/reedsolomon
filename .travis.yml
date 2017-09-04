@@ -6,5 +6,5 @@ install:
     - go get github.com/templexxx/reedsolomon
 
 script:
-    - go test
+    - go test -v
 
