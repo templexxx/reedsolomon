@@ -65,11 +65,7 @@ type (
 		// it will save time for calculating inverse matrix
 		// but it's not so important for big vect size
 		enableCache  bool
-		inverseCache iCache
-	}
-	iCache struct {
-		sync.RWMutex
-		data map[uint64][]byte
+		inverseCache sync.Map
 	}
 )
 
@@ -83,12 +79,10 @@ func newRS(d, p int, em matrix) (enc Encoder) {
 	initTbl(g, p, d, t)
 	ok := okCache(d, p)
 	if ext == avx2 {
-		e := &encAVX2{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok,
-			inverseCache: iCache{data: make(map[uint64][]byte)}}
+		e := &encAVX2{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok}
 		return e
 	}
-	e := &encSSSE3{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok,
-		inverseCache: iCache{data: make(map[uint64][]byte)}}
+	e := &encSSSE3{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok}
 	return e
 }
 
@@ -336,22 +330,19 @@ func (e *encAVX2) makeGen(has, dLost []int) (gen []byte, err error) {
 		}
 		return g, nil
 	}
-	var ikey uint64
+	var ikey uint32
 	for _, p := range has {
 		ikey += 1 << uint8(p)
 	}
-	e.inverseCache.RLock()
-	v, ok := e.inverseCache.data[ikey]
+	v, ok := e.inverseCache.Load(ikey)
 	if ok {
-		im := v
+		im := v.([]byte)
 		g := make([]byte, cnt*d)
 		for i, l := range dLost {
 			copy(g[i*d:i*d+d], im[l*d:l*d+d])
 		}
-		e.inverseCache.RUnlock()
 		return g, nil
 	}
-	e.inverseCache.RUnlock()
 	matrixbuf := make([]byte, 4*d*d+cnt*d)
 	m := matrixbuf[:d*d]
 	for i, l := range has {
@@ -363,9 +354,7 @@ func (e *encAVX2) makeGen(has, dLost []int) (gen []byte, err error) {
 	if err2 != nil {
 		return nil, err2
 	}
-	e.inverseCache.Lock()
-	e.inverseCache.data[ikey] = im
-	e.inverseCache.Unlock()
+	e.inverseCache.Store(ikey, im)
 	g := matrixbuf[4*d*d:]
 	for i, l := range dLost {
 		copy(g[i*d:i*d+d], im[l*d:l*d+d])
@@ -714,22 +703,19 @@ func (e *encSSSE3) makeGen(has, dLost []int) (gen []byte, err error) {
 		}
 		return g, nil
 	}
-	var ikey uint64
+	var ikey uint32
 	for _, p := range has {
 		ikey += 1 << uint8(p)
 	}
-	e.inverseCache.RLock()
-	v, ok := e.inverseCache.data[ikey]
+	v, ok := e.inverseCache.Load(ikey)
 	if ok {
-		im := v
+		im := v.([]byte)
 		g := make([]byte, cnt*d)
 		for i, l := range dLost {
 			copy(g[i*d:i*d+d], im[l*d:l*d+d])
 		}
-		e.inverseCache.RUnlock()
 		return g, nil
 	}
-	e.inverseCache.RUnlock()
 	matrixbuf := make([]byte, 4*d*d+cnt*d)
 	m := matrixbuf[:d*d]
 	for i, l := range has {
@@ -741,9 +727,7 @@ func (e *encSSSE3) makeGen(has, dLost []int) (gen []byte, err error) {
 	if err2 != nil {
 		return nil, err2
 	}
-	e.inverseCache.Lock()
-	e.inverseCache.data[ikey] = im
-	e.inverseCache.Unlock()
+	e.inverseCache.Store(ikey, im)
 	g := matrixbuf[4*d*d:]
 	for i, l := range dLost {
 		copy(g[i*d:i*d+d], im[l*d:l*d+d])
