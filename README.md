@@ -28,7 +28,7 @@ See the associated [GoDoc](http://godoc.org/github.com/templexxx/reedsolomon)
 ## Specification
 ### GOARCH
 1. All arch are supported
-2. need go1.9 for sync.Map in AMD64
+2. 0.1.0 need go1.9 for sync.Map in AMD64
 
 ### Math
 1. Coding over in GF(2^8)
@@ -64,7 +64,7 @@ And we must know the benchmark test is quite different with encoding/decoding in
 
 Because in benchmark test loops, the CPU Cache will help a lot. In practice, we must reuse the memory to make the performance become as good as the benchmark test.
 
-Example of performance on my MacBook 2017 i7 2.8GHz. 10+4.
+Example of performance on my MacBook 2017 i7 2.8GHz. 10+4 (with 0.1.0).
 
 ### Encoding:
 
