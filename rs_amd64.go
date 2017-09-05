@@ -69,7 +69,7 @@ type (
 	}
 	iCache struct {
 		sync.RWMutex
-		data map[uint64][]byte
+		data map[uint32][]byte
 	}
 )
 
@@ -84,11 +84,11 @@ func newRS(d, p int, em matrix) (enc Encoder) {
 	ok := okCache(d, p)
 	if ext == avx2 {
 		e := &encAVX2{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok,
-			inverseCache: iCache{data: make(map[uint64][]byte)}}
+			inverseCache: iCache{data: make(map[uint32][]byte)}}
 		return e
 	}
 	e := &encSSSE3{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok,
-		inverseCache: iCache{data: make(map[uint64][]byte)}}
+		inverseCache: iCache{data: make(map[uint32][]byte)}}
 	return e
 }
 
@@ -336,7 +336,7 @@ func (e *encAVX2) makeGen(has, dLost []int) (gen []byte, err error) {
 		}
 		return g, nil
 	}
-	var ikey uint64
+	var ikey uint32
 	for _, p := range has {
 		ikey += 1 << uint8(p)
 	}
@@ -714,7 +714,7 @@ func (e *encSSSE3) makeGen(has, dLost []int) (gen []byte, err error) {
 		}
 		return g, nil
 	}
-	var ikey uint64
+	var ikey uint32
 	for _, p := range has {
 		ikey += 1 << uint8(p)
 	}
