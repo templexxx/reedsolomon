@@ -43,10 +43,10 @@ func initTbl(g matrix, rows, cols int, tbl []byte) {
 	}
 }
 
-// At most 3060 inverse matrix (when data=18, parity=4, calc by mathtool/cntinverse)
+// At most 3060 inverse matrix (when data=14, parity=4, calc by mathtool/cntinverse)
 // In practice,  data usually below 12, parity below 5
 func okCache(data, parity int) bool {
-	if data < 19 && parity < 5 {
+	if data < 15 && parity < 5 {
 		return true
 	}
 	return false
