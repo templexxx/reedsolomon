@@ -68,7 +68,7 @@ func fillRandom(v []byte) {
 	}
 }
 
-func verifyReconst(t *testing.T, d, p int, lost []int) {
+func verifyEnc(t *testing.T, d, p int) {
 	for i := 1; i <= verifySize; i++ {
 		vects1 := make([][]byte, d+p)
 		vects2 := make([][]byte, d+p)
@@ -80,6 +80,45 @@ func verifyReconst(t *testing.T, d, p int, lost []int) {
 			rand.Seed(int64(j))
 			fillRandom(vects1[j])
 			copy(vects2[j], vects1[j])
+		}
+		e, err := New(d, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = e.Encode(vects1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		em, err := genEncMatrixVand(d, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		g := em[d*d:]
+		e2 := &encBase{data: d, parity: p, gen: g}
+		err = e2.Encode(vects2)
+		for k, v1 := range vects1 {
+			if !bytes.Equal(v1, vects2[k]) {
+				t.Fatalf("no match enc with encBase; vect: %d; size: %d", k, i)
+			}
+		}
+	}
+}
+
+func TestVerifyEnc(t *testing.T) {
+	verifyEnc(t, testNumIn, testNumOut)
+}
+
+func verifyReconst(t *testing.T, d, p int, lost []int) {
+	for i := 1; i <= verifySize; i++ {
+		vects1 := make([][]byte, d+p)
+		vects2 := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
+			vects1[j] = make([]byte, i)
+			vects2[j] = make([]byte, i)
+		}
+		for j := 0; j < d; j++ {
+			rand.Seed(int64(j))
+			fillRandom(vects1[j])
 		}
 		e, err := New(d, p)
 		if err != nil {

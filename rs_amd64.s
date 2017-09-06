@@ -410,10 +410,11 @@ TEXT ·hasSSSE3(SB), NOSPLIT, $0
 
 // func copy32B(dst, src []byte)
 TEXT ·copy32B(SB), NOSPLIT, $0
-    MOVQ dst+0(FP), AX
-    MOVQ src+24(FP), BX
-    MOVOU (BX), X0
-    MOVOU 16(BX), X1
-    MOVOU X0, (AX)
-    MOVOU X1, 16(AX)
+    MOVQ dst+0(FP), SI
+    MOVQ src+24(FP), DX
+    MOVOU (DX), X0
+    MOVOU 16(DX), X1
+    MOVOU X0, (SI)
+    MOVOU X1, 16(SI)
     RET
+	
