@@ -98,6 +98,10 @@ Example of performance on my MacBook 2017 i7 2.8GHz. 10+4 (with 0.1.0).
 
 **reconstruct benchmark tests here run with inverse matrix cache, if there is no cache, it will cost more time( about 1000ns)**
 
+## Who is using this?
+
+1. https://github.com/xtaci/kcp-go -- A Production-Grade Reliable-UDP Library for golang
+
 ## Links & Thanks
 * [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon)
 * [intel ISA-L](https://github.com/01org/isa-l)
