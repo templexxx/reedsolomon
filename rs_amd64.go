@@ -3,6 +3,7 @@ package reedsolomon
 import (
 	"errors"
 	"sync"
+	"github.com/klauspost/cpuid"
 )
 
 // SIMD Instruction Extensions
@@ -13,9 +14,9 @@ const (
 )
 
 func getEXT() int {
-	if hasAVX2() {
+	if cpuid.CPU.AVX2() {
 		return avx2
-	} else if hasSSSE3() {
+	} else if cpuid.CPU.SSSE3() {
 		return ssse3
 	} else {
 		return none
