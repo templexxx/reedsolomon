@@ -323,16 +323,6 @@ one16b:
 	JNE      ymm
 	RET
 
-TEXT ·hasAVX2(SB), NOSPLIT, $0
-	XORQ AX, AX
-	XORQ CX, CX
-	ADDL $7, AX
-	CPUID
-	SHRQ $5, BX
-	ANDQ $1, BX
-	MOVB BX, ret+0(FP)
-	RET
-
 // func mulVectSSSE3(tbl, d, p []byte)
 TEXT ·mulVectSSSE3(SB), NOSPLIT, $0
     MOVQ    i+24(FP), in
@@ -397,15 +387,6 @@ loop:
 	ADDQ   $16, out
 	SUBQ   $1, len
 	JNZ    loop
-	RET
-
-TEXT ·hasSSSE3(SB), NOSPLIT, $0
-	XORQ AX, AX
-	INCL AX
-	CPUID
-	SHRQ $9, CX
-	ANDQ $1, CX
-	MOVB CX, ret+0(FP)
 	RET
 
 // func copy32B(dst, src []byte)
