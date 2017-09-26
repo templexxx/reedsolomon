@@ -3,6 +3,8 @@ package reedsolomon
 import (
 	"errors"
 	"sync"
+
+	"github.com/templexxx/cpufeat"
 )
 
 // SIMD Instruction Extensions
@@ -12,21 +14,24 @@ const (
 	ssse3
 )
 
-func getEXT() int {
-	if hasAVX2() {
-		return avx2
-	} else if hasSSSE3() {
-		return ssse3
-	} else {
-		return none
-	}
+var extension = none
+
+func init() {
+	getEXT()
 }
 
-//go:noescape
-func hasAVX2() bool
-
-//go:noescape
-func hasSSSE3() bool
+func getEXT() {
+	if cpufeat.X86.HasAVX2 {
+		extension = avx2
+		return
+	} else if cpufeat.X86.HasSSSE3 {
+		extension = ssse3
+		return
+	} else {
+		extension = none
+		return
+	}
+}
 
 //go:noescape
 func copy32B(dst, src []byte) // Need SSE2(introduced in 2001)
@@ -75,14 +80,13 @@ type (
 
 func newRS(d, p int, em matrix) (enc Encoder) {
 	g := em[d*d:]
-	ext := getEXT()
-	if ext == none {
+	if extension == none {
 		return &encBase{data: d, parity: p, encode: em, gen: g}
 	}
 	t := make([]byte, d*p*32)
 	initTbl(g, p, d, t)
 	ok := okCache(d, p)
-	if ext == avx2 {
+	if extension == avx2 {
 		e := &encAVX2{data: d, parity: p, encode: em, gen: g, tbl: t, enableCache: ok,
 			inverseCache: iCache{data: make(map[uint32][]byte)}}
 		return e
