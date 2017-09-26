@@ -36,7 +36,7 @@ func main() {
 }
 
 func getMAXCCombination(a uint64) uint64 {
-	b := a / 2 // proved in mathtool/ccmbination.jpg
+	b := a / 2 // proved in mathtool/combination.jpg
 	return getCCombination(a, b)
 }
 
