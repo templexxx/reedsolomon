@@ -3,9 +3,10 @@ package reedsolomon
 import (
 	"bytes"
 	"fmt"
-	"go/xec/cpu"
 	"math/rand"
 	"testing"
+
+	cpu "github.com/templexxx/cpufeat"
 )
 
 const (
