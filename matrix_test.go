@@ -5,26 +5,8 @@ import (
 	"testing"
 )
 
-func TestVerifyEncMatrixVand(t *testing.T) {
-	a, err := genEncMatrixVand(4, 4)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e := []byte{1, 0, 0, 0,
-		0, 1, 0, 0,
-		0, 0, 1, 0,
-		0, 0, 0, 1,
-		27, 28, 18, 20,
-		28, 27, 20, 18,
-		18, 20, 27, 28,
-		20, 18, 28, 27}
-	if !bytes.Equal(a, e) {
-		t.Fatal("mismatch")
-	}
-}
-
 func TestVerifyEncMatrixCauchy(t *testing.T) {
-	a := genEncMatrixCauchy(4, 4)
+	a := genEncMatrix(4, 4)
 	e := []byte{1, 0, 0, 0,
 		0, 1, 0, 0,
 		0, 0, 1, 0,
@@ -41,7 +23,7 @@ func TestVerifyEncMatrixCauchy(t *testing.T) {
 func TestMatrixInvert(t *testing.T) {
 	testCases := []struct {
 		matrixData  []byte
-		cols        int
+		n           int
 		expect      []byte
 		ok          bool
 		expectedErr error
@@ -89,15 +71,13 @@ func TestMatrixInvert(t *testing.T) {
 			2,
 			nil,
 			false,
-			errSingular,
+			ErrSingularMatrix,
 		},
 	}
 
 	for i, c := range testCases {
 		m := matrix(c.matrixData)
-		raw := make([]byte, 2*c.cols*c.cols)
-		actual := make([]byte, c.cols*c.cols)
-		actualErr := m.invert(raw, c.cols, actual)
+		actual, actualErr := m.invert(c.n)
 		if actualErr != nil && c.ok {
 			t.Errorf("case.%d, expected to pass, but failed with: <ERROR> %s", i+1, actualErr.Error())
 		}
@@ -117,16 +97,14 @@ func TestMatrixInvert(t *testing.T) {
 	}
 }
 
-func benchmarkInvert(b *testing.B, size int) {
-	m := genEncMatrixCauchy(size, 2)
-	m.swap(0, size, size)
-	m.swap(1, size+1, size)
+func benchmarkInvert(b *testing.B, n int) {
+	m := genEncMatrix(n, 2)
+	m.swap(0, n, n)
+	m.swap(1, n+1, n)
+	raw := matrix(m[:n*n])
 	b.ResetTimer()
-	buf := make([]byte, 3*size*size)
-	raw := buf[:2*size*size]
-	r := buf[2*size*size:]
 	for i := 0; i < b.N; i++ {
-		err := m.invert(raw, size, r)
+		_, err := raw.invert(n)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -135,12 +113,4 @@ func benchmarkInvert(b *testing.B, size int) {
 
 func BenchmarkInvert5x5(b *testing.B) {
 	benchmarkInvert(b, 5)
-}
-
-func BenchmarkInvert10x10(b *testing.B) {
-	benchmarkInvert(b, 10)
-}
-
-func BenchmarkInvert20x20(b *testing.B) {
-	benchmarkInvert(b, 20)
 }

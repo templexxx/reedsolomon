@@ -2,7 +2,12 @@
 
 package reedsolomon
 
-func newRS(d, p int, em matrix) (enc Encoder) {
-	g := em[d*d:]
-	return &encBase{data: d, parity: p, encode: em, gen: g}
+// parity = c *data
+func coeffMulVect(c byte, data, parity []byte, cpuFeature int) {
+	coeffMulVectBase(c, data, parity)
+}
+
+// parity = parity xor (c * data)
+func coeffMulVectUpdate(c byte, data, parity []byte, cpuFeature int) {
+	coeffMulVectUpdateBase(c, data, parity)
 }
