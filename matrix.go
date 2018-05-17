@@ -2,152 +2,112 @@ package reedsolomon
 
 import "errors"
 
+// matrix row*cols bytes
 type matrix []byte
 
-func genEncMatrixCauchy(d, p int) matrix {
-	t := d + p
-	m := make([]byte, t*d)
+// genEncMatrix generate encoding matrix. upper: Identity_Matrix; lower: Cauchy_Matrix
+func genEncMatrix(d, p int) matrix {
+	r := d + p
+	m := make([]byte, r*d)
+	// create identity matrix upper
 	for i := 0; i < d; i++ {
 		m[i*d+i] = byte(1)
 	}
-
-	d2 := d * d
-	for i := d; i < t; i++ {
+	// create cauchy matrix below
+	off := d * d // offset of encMatrix
+	for i := d; i < r; i++ {
 		for j := 0; j < d; j++ {
 			d := i ^ j
 			a := inverseTbl[d]
-			m[d2] = byte(a)
-			d2++
+			m[off] = byte(a)
+			off++
 		}
 	}
 	return m
 }
 
-func gfExp(b byte, n int) byte {
-	if n == 0 {
-		return 1
-	}
-	if b == 0 {
-		return 0
-	}
-	a := logTbl[b]
-	ret := int(a) * n
-	for ret >= 255 {
-		ret -= 255
-	}
-	return byte(expTbl[ret])
-}
-
-func genVandMatrix(vm []byte, t, d int) {
-	for i := 0; i < t; i++ {
-		for j := 0; j < d; j++ {
-			vm[i*d+j] = gfExp(byte(i), j)
-		}
-	}
-}
-
-func (m matrix) mul(right matrix, rows, cols int, r []byte) {
-	for i := 0; i < rows; i++ {
-		for j := 0; j < cols; j++ {
-			var v byte
-			for k := 0; k < cols; k++ {
-				v ^= gfMul(m[i*cols+k], right[k*cols+j])
-			}
-			r[i*cols+j] = v
-		}
-	}
-}
-
-func genEncMatrixVand(d, p int) (matrix, error) {
-	t := d + p
-	buf := make([]byte, (2*t+4*d)*d)
-	vm := buf[:t*d]
-	genVandMatrix(vm, t, d)
-	top := buf[t*d : (t+d)*d]
-	copy(top, vm[:d*d])
-	raw := buf[(t+d)*d : (t+3*d)*d]
-	im := buf[(t+3*d)*d : (t+4*d)*d]
-	err := matrix(top).invert(raw, d, im)
-	if err != nil {
-		return nil, err
-	}
-	r := buf[(t+4*d)*d : (2*t+4*d)*d]
-	matrix(vm).mul(im, t, d, r)
-	return matrix(r), nil
-}
-
-// [I|m'] -> [m']
-func (m matrix) subMatrix(n int, r []byte) {
+// [A|B] -> [B]
+func (m matrix) subMatrix(n int) (b matrix) {
+	b = matrix(make([]byte, n*n))
 	for i := 0; i < n; i++ {
 		off := i * n
-		copy(r[off:off+n], m[2*off+n:2*(off+n)])
+		copy(b[off:off+n], m[2*off+n:2*(off+n)])
 	}
+	return
 }
 
-func (m matrix) invert(raw matrix, n int, im []byte) error {
-	// [m] -> [m|I]
+var ErrNoSquare = errors.New("not a square matrix")
+
+func (m matrix) invert(n int) (im matrix, err error) { // im: inverse_matrix of m
+	if n != len(m)/n {
+		err = ErrNoSquare
+		return
+	}
+	// step1: (m) -> (m|I)
+	mI := matrix(make([]byte, 2*n*n))
+	off := 0
 	for i := 0; i < n; i++ {
-		t := i * n
-		copy(raw[2*t:2*t+n], m[t:t+n])
-		raw[2*t+i+n] = byte(1)
+		copy(mI[2*off:2*off+n], m[off:off+n])
+		mI[2*off+n+i] = byte(1)
+		off += n
 	}
-	err := gauss(raw, n)
-	if err != nil {
-		return err
-	}
-	raw.subMatrix(n, im)
-	return nil
+	// step2: Gaussian Elimination
+	err = mI.gauss(n)
+	im = mI.subMatrix(n)
+	return
 }
 
+// swap row[i] & row[j], col = n
 func (m matrix) swap(i, j, n int) {
 	for k := 0; k < n; k++ {
 		m[i*n+k], m[j*n+k] = m[j*n+k], m[i*n+k]
 	}
 }
 
-func gfMul(a, b byte) byte {
-	return mulTbl[a][b]
-}
+var ErrSingularMatrix = errors.New("matrix is singular")
 
-var errSingular = errors.New("rs.invert: matrix is singular")
-
-// [m|I] -> [I|m']
-func gauss(m matrix, n int) error {
-	n2 := 2 * n
+// (A|I) -> (I|A')
+func (m matrix) gauss(n int) error {
+	c := 2 * n // c: cols_num of m
+	// main_diagonal(left_part) -> 1 & left_part -> upper_triangular
 	for i := 0; i < n; i++ {
-		if m[i*n2+i] == 0 {
+		// m[i*c+i]: element of main_diagonal(left_part)
+		if m[i*c+i] == 0 { // swap until get a non-zero element
 			for j := i + 1; j < n; j++ {
-				if m[j*n2+i] != 0 {
-					m.swap(i, j, n2)
+				if m[j*c+i] != 0 {
+					m.swap(i, j, c)
 					break
 				}
 			}
 		}
-		if m[i*n2+i] == 0 {
-			return errSingular
+		if m[i*c+i] == 0 { // all element in one col are zero
+			return ErrSingularMatrix
 		}
-		if m[i*n2+i] != 1 {
-			d := m[i*n2+i]
-			scale := inverseTbl[d]
-			for c := 0; c < n2; c++ {
-				m[i*n2+c] = gfMul(m[i*n2+c], scale)
+		// main_diagonal(left_part) -> 1
+		if m[i*c+i] != 1 {
+			e := m[i*c+i]
+			s := inverseTbl[e] // s * e = 1
+			for j := 0; j < c; j++ {
+				m[i*c+j] = mulTbl[m[i*c+j]][s] // all element * s (in i row)
 			}
 		}
+		// left_part -> upper_triangular
 		for j := i + 1; j < n; j++ {
-			if m[j*n2+i] != 0 {
-				scale := m[j*n2+i]
-				for c := 0; c < n2; c++ {
-					m[j*n2+c] ^= gfMul(scale, m[i*n2+c])
+			if m[j*c+i] != 0 {
+				s := m[j*c+i] // s ^ (s * m[i*c+i]) = 0, m[i*c+i] = 1
+				for k := 0; k < c; k++ {
+					m[j*c+k] ^= mulTbl[s][m[i*c+k]] // all element ^ (s * row_i[k]) (in j row)
 				}
 			}
 		}
 	}
-	for k := 0; k < n; k++ {
-		for j := 0; j < k; j++ {
-			if m[j*n2+k] != 0 {
-				scale := m[j*n2+k]
-				for c := 0; c < n2; c++ {
-					m[j*n2+c] ^= gfMul(scale, m[k*n2+c])
+	// element upper main_diagonal(left_part) -> 0
+	for i := 0; i < n; i++ {
+		for j := 0; j < i; j++ {
+			if m[j*c+i] != 0 {
+				s := m[j*c+i] // s ^ (s * m[i*c+i]) = 0, m[i*c+i] = 1
+				for k := 0; k < c; k++ {
+					m[j*c+k] ^= mulTbl[s][m[i*c+k]] // all element ^ (s * row_i[k]) (in j row)
 				}
 			}
 		}

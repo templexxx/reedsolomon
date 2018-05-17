@@ -2,279 +2,440 @@
 	Reed-Solomon Codes over GF(2^8)
 	Primitive Polynomial:  x^8+x^4+x^3+x^2+1
 	Galois Filed arithmetic using Intel SIMD instructions (AVX2 or SSSE3)
+	Platform: X86-64 (amd64)
 */
 
 package reedsolomon
 
-import "errors"
+import (
+	"errors"
+	"sort"
+	"sync"
 
-// Encoder implements for Reed-Solomon Encoding/Reconstructing
-type Encoder interface {
-	// Encode multiply generator-matrix with data
-	// len(vects) must be equal with num of data+parity
-	Encode(vects [][]byte) error
-	// Result of reconst will be put into origin position of vects
-	// it means if you lost vects[0], after reconst the vects[0]'s data will be back in vects[0]
+	cpu "github.com/templexxx/cpufeat"
+	"github.com/templexxx/xor"
+)
 
-	// Reconstruct repair lost data & parity
-	// Set vect nil if lost
-	Reconstruct(vects [][]byte) error
-	// Reconstruct repair lost data
-	// Set vect nil if lost
-	ReconstructData(vects [][]byte) error
-	// ReconstWithPos repair lost data&parity with has&lost vects position
-	// Save bandwidth&disk I/O (cmp with Reconstruct, if the lost is less than num of parity)
-	// As erasure codes, we must know which vect is broken,
-	// so it's necessary to provide such APIs
-	// len(has) must equal num of data vects
-	// Example:
-	// in 3+2, the whole position: [0,1,2,3,4]
-	// if lost vects[0]
-	// the "has" could be [1,2,3] or [1,2,4] or ...
-	// then you must be sure that vects[1] vects[2] vects[3] have correct data (if the "has" is [1,2,3])
-	// the "dLost" will be [0]
-	// ps:
-	// 1. the above lists are in increasing orders  TODO support out-of-order
-	// 2. each vect has same len, don't set it nil
-	// so we don't need to make slice
-	ReconstWithPos(vects [][]byte, has, dLost, pLost []int) error
-	//// ReconstWithPos repair lost data with survived&lost vects position
-	//// Don't need to append position of parity lost into "lost"
-	ReconstDataWithPos(vects [][]byte, has, dLost []int) error
+type (
+	// RS Reed-Solomon Codes Encode/Reconstruct receiver
+	RS struct {
+		DataCnt      int
+		ParityCnt    int
+		cpuFeature   int
+		encodeMatrix matrix // encoding_matrix
+		genMatrix    matrix // generator_matrix
+		inverseCache        // cache inverse_matrix
+	}
+	inverseCache struct {
+		cacheEnabled bool
+		sync.Map
+	}
+)
+
+// New create an RS
+func New(data, parity int) (r *RS, err error) {
+	err = checkCfg(data, parity)
+	if err != nil {
+		return
+	}
+	e := genEncMatrix(data, parity)
+	g := e[data*data:]
+	r = &RS{DataCnt: data, ParityCnt: parity, encodeMatrix: e, genMatrix: g}
+	r.enableCache()
+	r.getCPUFeature()
+	return
 }
+
+var ErrMinVects = errors.New("data or parity <= 0")
+var ErrMaxVects = errors.New("data+parity >= 256")
 
 func checkCfg(d, p int) error {
 	if (d <= 0) || (p <= 0) {
-		return errors.New("rs.New: data or parity <= 0")
+		return ErrMinVects
 	}
 	if d+p >= 256 {
-		return errors.New("rs.New: data+parity >= 256")
+		return ErrMaxVects
 	}
 	return nil
 }
 
-// New create an Encoder (vandermonde matrix as Encoding matrix)
-func New(data, parity int) (enc Encoder, err error) {
-	err = checkCfg(data, parity)
+// At most 20475 inverse_matrix (when data=28, parity=4)
+func (r *RS) enableCache() {
+	if r.DataCnt < 29 && r.ParityCnt < 5 { // data+parity can't be bigger than 32 (tips: see the codes about make inverse matrix)
+		r.cacheEnabled = true
+	} else {
+		r.cacheEnabled = false
+	}
+}
+
+const (
+	base = iota
+	ssse3
+	avx2
+)
+
+func (r *RS) getCPUFeature() {
+	if cpu.X86.HasAVX2 {
+		r.cpuFeature = avx2
+	} else if cpu.X86.HasSSSE3 {
+		r.cpuFeature = ssse3
+	} else {
+		r.cpuFeature = base
+	}
+}
+
+// Encode outputs parity into vects
+func (r *RS) Encode(vects [][]byte) (err error) {
+	err = r.checkEncode(vects)
 	if err != nil {
 		return
 	}
-	e, err := genEncMatrixVand(data, parity)
-	if err != nil {
-		return
-	}
-	return newRS(data, parity, e), nil
+	r.encode(vects, false)
+	return
 }
 
-// NewCauchy create an Encoder (cauchy matrix as Generator Matrix)
-func NewCauchy(data, parity int) (enc Encoder, err error) {
-	err = checkCfg(data, parity)
-	if err != nil {
+var ErrVectCnt = errors.New("vects != data + parity")
+var ErrVectSizeZero = errors.New("vect size cannot equal 0")
+var ErrVectSizeMismatch = errors.New("vects size mismatch")
+
+func (r *RS) checkEncode(vects [][]byte) (err error) {
+	rows := len(vects)
+	if r.DataCnt+r.ParityCnt != rows {
+		err = ErrVectCnt
 		return
 	}
-	e := genEncMatrixCauchy(data, parity)
-	return newRS(data, parity, e), nil
-}
-
-type encBase struct {
-	data   int
-	parity int
-	encode []byte
-	gen    []byte
-}
-
-func checkEnc(d, p int, vs [][]byte) (size int, err error) {
-	total := len(vs)
-	if d+p != total {
-		err = errors.New("rs.checkER: vects not match rs args")
-		return
-	}
-	size = len(vs[0])
+	size := len(vects[0])
 	if size == 0 {
-		err = errors.New("rs.checkER: vects size = 0")
+		err = ErrVectSizeZero
 		return
 	}
-	for i := 1; i < total; i++ {
-		if len(vs[i]) != size {
-			err = errors.New("rs.checkER: vects size mismatch")
+	for i := 1; i < rows; i++ {
+		if len(vects[i]) != size {
+			err = ErrVectSizeMismatch
 			return
 		}
 	}
 	return
 }
 
-func (e *encBase) Encode(vects [][]byte) (err error) {
-	d := e.data
-	p := e.parity
-	_, err = checkEnc(d, p, vects)
+func (r *RS) encode(vects [][]byte, updateOnly bool) {
+	dv, pv := vects[:r.DataCnt], vects[r.DataCnt:]
+	size := len(vects[0])
+	splitSize := getSplitSize(size)
+	start := 0
+	for start < size {
+		end := start + splitSize
+		if end <= size {
+			r.encodePart(start, end, dv, pv, updateOnly)
+			start = end
+		} else {
+			r.encodePart(start, size, dv, pv, updateOnly) // calculate left_data (< splitSize)
+			start = size
+		}
+	}
+}
+
+const L1DataCacheSize = 32 * 1024
+
+// split vects for cache-friendly (size must be divisible by 16)
+func getSplitSize(n int) int {
+	if n < 16 {
+		return 16
+	}
+	if n < L1DataCacheSize/2 {
+		return (n >> 4) << 4
+	}
+	return L1DataCacheSize / 2
+}
+
+// encode data[i][start:end]
+func (r *RS) encodePart(start, end int, dataVects, parityVects [][]byte, updateOnly bool) {
+	undoneSize := end - start
+	splitSize := (undoneSize >> 4) << 4 // splitSize could be 0(when undoneSize < 16)
+	d, p, g, cF := r.DataCnt, r.ParityCnt, r.genMatrix, r.cpuFeature
+	if splitSize >= 16 {
+		end2 := start + splitSize
+		for i := 0; i < d; i++ {
+			for j := 0; j < p; j++ {
+				if i != 0 || updateOnly == true {
+					coeffMulVectUpdate(g[j*d+i], dataVects[i][start:end2], parityVects[j][start:end2], cF)
+				} else {
+					coeffMulVect(g[j*d+i], dataVects[0][start:end2], parityVects[j][start:end2], cF)
+				}
+			}
+		}
+	}
+	if undoneSize > splitSize { // 0 < undoneSize-splitSize < 16
+		for i := 0; i < d; i++ {
+			for j := 0; j < p; j++ {
+				if i != 0 || updateOnly == true {
+					coeffMulVectUpdateBase(g[j*d+i], dataVects[i][start:end], parityVects[j][start:end])
+				} else {
+					coeffMulVectBase(g[j*d], dataVects[0][start:end], parityVects[j][start:end])
+				}
+			}
+		}
+	}
+}
+
+func coeffMulVectBase(c byte, d, p []byte) {
+	t := mulTbl[c]
+	for i := 0; i < len(d); i++ {
+		p[i] = t[d[i]]
+	}
+}
+
+func coeffMulVectUpdateBase(c byte, d, p []byte) {
+	t := mulTbl[c]
+	for i := 0; i < len(d); i++ {
+		p[i] ^= t[d[i]]
+	}
+}
+
+var ErrMismatchParityCnt = errors.New("mismatch parity cnt")
+var ErrIllegalUpdateSize = errors.New("illegal update size")
+var ErrIllegalUpdateRow = errors.New("illegal update row")
+
+// UpdateParity update parity_data when one data_vect changes
+func (r *RS) UpdateParity(oldData []byte, newData []byte, updateRow int, parity [][]byte) (err error) {
+	// check args
+	if len(parity) != r.ParityCnt {
+		err = ErrMismatchParityCnt
+		return
+	}
+	size := len(newData)
+	if size <= 0 {
+		err = ErrIllegalUpdateSize
+		return
+	}
+	if size != len(oldData) {
+		err = ErrIllegalUpdateSize
+		return
+	}
+	for i := range parity {
+		if len(parity[i]) != size {
+			err = ErrIllegalUpdateSize
+			return
+		}
+	}
+	if updateRow >= r.DataCnt {
+		err = ErrIllegalUpdateRow
+		return
+	}
+
+	// step1: buf (old_data xor new_data)
+	buf := make([]byte, size)
+	xor.Matrix(buf, [][]byte{oldData, newData})
+	// step2: reEnc parity
+	updateVects := make([][]byte, 1+r.ParityCnt)
+	updateVects[0] = buf
+	updateGenMatrix := make([]byte, r.ParityCnt)
+	// make update_generator_matrix & update_vects
+	for i := 0; i < r.ParityCnt; i++ {
+		col := updateRow
+		off := i*r.DataCnt + col
+		c := r.genMatrix[off]
+		updateGenMatrix[i] = c
+		updateVects[i+1] = parity[i]
+	}
+	updateRS := &RS{DataCnt: 1, ParityCnt: r.ParityCnt, genMatrix: updateGenMatrix, cpuFeature: r.cpuFeature}
+	updateRS.encode(updateVects, true)
+	return nil
+}
+
+// Reconst repair missing vects, len(dpHas) == dataCnt
+// e.g:
+// in 3+2, the whole index: [0,1,2,3,4]
+// if vects[0,4] are lost & they need to be reconst
+// the "dpHas" will be [1,2,3] ,and you must be sure that vects[1] vects[2] vects[3] have correct data
+// results will be put into vects[0]&vects[4]
+// dataOnly: only reconst data or not
+func (r *RS) Reconst(vects [][]byte, dpHas, needReconst []int) (err error) {
+	err = r.checkReconst(dpHas, needReconst)
+	if err != nil {
+		if err == ErrNoNeedReconst {
+			return nil
+		}
+		return
+	}
+	sort.Ints(dpHas)
+	dNeedReconst, pNeedReconst := SplitNeedReconst(r.DataCnt, needReconst)
+	if len(dNeedReconst) != 0 {
+		err = r.reconstData(vects, dpHas, dNeedReconst)
+		if err != nil {
+			return
+		}
+	}
+	if len(pNeedReconst) != 0 {
+		err = r.reconstParity(vects, pNeedReconst)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+func (r *RS) reconstData(vects [][]byte, dpHas, dNeedReconst []int) (err error) {
+	d := r.DataCnt
+	lostCnt := len(dNeedReconst)
+	vTmp := make([][]byte, d+lostCnt)
+	for i, row := range dpHas {
+		vTmp[i] = vects[row]
+	}
+	for i, row := range dNeedReconst {
+		vTmp[i+d] = vects[row]
+	}
+	g, err := r.getGenMatrix(dpHas, dNeedReconst)
 	if err != nil {
 		return
 	}
-	dv := vects[:d]
-	pv := vects[d:]
-	g := e.gen
-	for i := 0; i < d; i++ {
-		for j := 0; j < p; j++ {
-			if i != 0 {
-				mulVectAdd(g[j*d+i], dv[i], pv[j])
-			} else {
-				mulVect(g[j*d], dv[0], pv[j])
-			}
-		}
-	}
-	return
-}
-
-func mulVect(c byte, a, b []byte) {
-	t := mulTbl[c]
-	for i := 0; i < len(a); i++ {
-		b[i] = t[a[i]]
-	}
-}
-
-func mulVectAdd(c byte, a, b []byte) {
-	t := mulTbl[c]
-	for i := 0; i < len(a); i++ {
-		b[i] ^= t[a[i]]
-	}
-}
-
-func (e *encBase) Reconstruct(vects [][]byte) (err error) {
-	return e.reconstruct(vects, false)
-}
-
-func (e *encBase) ReconstructData(vects [][]byte) (err error) {
-	return e.reconstruct(vects, true)
-}
-
-func (e *encBase) ReconstWithPos(vects [][]byte, has, dLost, pLost []int) error {
-	return e.reconstWithPos(vects, has, dLost, pLost, false)
-}
-
-func (e *encBase) ReconstDataWithPos(vects [][]byte, has, dLost []int) error {
-	return e.reconstWithPos(vects, has, dLost, nil, true)
-}
-
-func (e *encBase) reconst(vects [][]byte, has, dLost, pLost []int, dataOnly bool) (err error) {
-	d := e.data
-	em := e.encode
-	dCnt := len(dLost)
-	size := len(vects[has[0]])
-	if dCnt != 0 {
-		vtmp := make([][]byte, d+dCnt)
-		for i, p := range has {
-			vtmp[i] = vects[p]
-		}
-		for i, p := range dLost {
-			if len(vects[p]) == 0 {
-				vects[p] = make([]byte, size)
-			}
-			vtmp[i+d] = vects[p]
-		}
-		matrixbuf := make([]byte, 4*d*d+dCnt*d)
-		m := matrixbuf[:d*d]
-		for i, l := range has {
-			copy(m[i*d:i*d+d], em[l*d:l*d+d])
-		}
-		raw := matrixbuf[d*d : 3*d*d]
-		im := matrixbuf[3*d*d : 4*d*d]
-		err2 := matrix(m).invert(raw, d, im)
-		if err2 != nil {
-			return err2
-		}
-		g := matrixbuf[4*d*d:]
-		for i, l := range dLost {
-			copy(g[i*d:i*d+d], im[l*d:l*d+d])
-		}
-		etmp := &encBase{data: d, parity: dCnt, gen: g}
-		err2 = etmp.Encode(vtmp[:d+dCnt])
-		if err2 != nil {
-			return err2
-		}
-	}
-	if dataOnly {
+	rTmp := &RS{DataCnt: d, ParityCnt: lostCnt, genMatrix: g, cpuFeature: r.cpuFeature}
+	err = rTmp.Encode(vTmp)
+	if err != nil {
 		return
 	}
-	pCnt := len(pLost)
-	if pCnt != 0 {
-		vtmp := make([][]byte, d+pCnt)
-		g := make([]byte, pCnt*d)
-		for i, l := range pLost {
-			copy(g[i*d:i*d+d], em[l*d:l*d+d])
+	return
+}
+
+func (r *RS) reconstParity(vects [][]byte, lost []int) (err error) {
+	d := r.DataCnt
+	lostCnt := len(lost)
+	vTmp := make([][]byte, d+lostCnt)
+	g := make([]byte, lostCnt*d)
+	for i, l := range lost {
+		copy(g[i*d:i*d+d], r.encodeMatrix[l*d:l*d+d])
+	}
+	for i := 0; i < d; i++ {
+		vTmp[i] = vects[i]
+	}
+	for i, p := range lost {
+		vTmp[i+d] = vects[p]
+	}
+	rTmp := &RS{DataCnt: d, ParityCnt: lostCnt, genMatrix: g, cpuFeature: r.cpuFeature}
+	err = rTmp.Encode(vTmp)
+	if err != nil {
+		return
+	}
+	return
+}
+
+var ErrNoNeedReconst = errors.New("no need reconst")
+var ErrTooManyLost = errors.New("too many lost vects")
+var ErrDPHasMismatchDataCnt = errors.New("len(dpHas) must = dataCnt")
+var ErrIllegalIndex = errors.New("illegal index")
+var ErrHasLostConflict = errors.New("dpHas&lost are conflicting")
+
+func (r *RS) checkReconst(dpHas, needReconst []int) (err error) {
+	d, p := r.DataCnt, r.ParityCnt
+	if len(needReconst) == 0 {
+		err = ErrNoNeedReconst
+		return
+	}
+	if len(needReconst) > p {
+		err = ErrTooManyLost
+		return
+	}
+	if len(dpHas) != d {
+		err = ErrDPHasMismatchDataCnt
+		return
+	}
+	for _, i := range dpHas {
+		if i < 0 || i >= d+p {
+			err = ErrIllegalIndex
+			return
 		}
-		for i := 0; i < d; i++ {
-			vtmp[i] = vects[i]
+		if isIn(i, needReconst) {
+			err = ErrHasLostConflict
+			return
 		}
-		for i, p := range pLost {
-			if len(vects[p]) == 0 {
-				vects[p] = make([]byte, size)
-			}
-			vtmp[i+d] = vects[p]
-		}
-		etmp := &encBase{data: d, parity: pCnt, gen: g}
-		err2 := etmp.Encode(vtmp[:d+pCnt])
-		if err2 != nil {
-			return err2
+	}
+	for _, i := range needReconst {
+		if i < 0 || i >= d+p {
+			err = ErrIllegalIndex
+			return
 		}
 	}
 	return
 }
 
-func (e *encBase) reconstWithPos(vects [][]byte, has, dLost, pLost []int, dataOnly bool) (err error) {
-	d := e.data
-	p := e.parity
-	// TODO check more, maybe element in has show in lost & deal with len(has) > d
-	if len(has) != d {
-		return errors.New("rs.Reconst: not enough vects")
-	}
-	dCnt := len(dLost)
-	if dCnt > p {
-		return errors.New("rs.Reconst: not enough vects")
-	}
-	pCnt := len(pLost)
-	if pCnt > p {
-		return errors.New("rs.Reconst: not enough vects")
-	}
-	return e.reconst(vects, has, dLost, pLost, dataOnly)
-}
-
-func (e *encBase) reconstruct(vects [][]byte, dataOnly bool) (err error) {
-	d := e.data
-	p := e.parity
-	t := d + p
-	listBuf := make([]int, t+p)
-	has := listBuf[:d]
-	dLost := listBuf[d:t]
-	pLost := listBuf[t : t+p]
-	hasCnt, dCnt, pCnt := 0, 0, 0
-	for i := 0; i < t; i++ {
-		if vects[i] != nil {
-			if hasCnt < d {
-				has[hasCnt] = i
-				hasCnt++
-			}
-		} else {
-			if i < d {
-				if dCnt < p {
-					dLost[dCnt] = i
-					dCnt++
-				} else {
-					return errors.New("rs.Reconst: not enough vects")
-				}
-			} else {
-				if pCnt < p {
-					pLost[pCnt] = i
-					pCnt++
-				} else {
-					return errors.New("rs.Reconst: not enough vects")
-				}
-			}
+// SplitNeedReconst split data_lost & parity_lost
+func SplitNeedReconst(dataCnt int, needReconst []int) (dNeedReconst, pNeedReconst []int) {
+	sort.Ints(needReconst)
+	for i, l := range needReconst {
+		if l >= dataCnt {
+			return needReconst[:i], needReconst[i:]
 		}
 	}
-	if hasCnt != d {
-		return errors.New("rs.Reconst: not enough vects")
+	return needReconst, nil
+}
+
+func isIn(e int, s []int) bool {
+	for _, v := range s {
+		if e == v {
+			return true
+		}
 	}
-	dLost = dLost[:dCnt]
-	pLost = pLost[:pCnt]
-	return e.reconst(vects, has, dLost, pLost, dataOnly)
+	return false
+}
+
+func (r *RS) getGenMatrix(dpHas, dLost []int) (gm []byte, err error) {
+	d := r.DataCnt
+	lostCnt := len(dLost)
+	if !r.cacheEnabled { // no cache
+		eNew, err2 := r.makeEncodeMatrix(dpHas)
+		if err2 != nil {
+			return nil, err2
+		}
+		gm = make([]byte, lostCnt*d)
+		for i, l := range dLost {
+			copy(gm[i*d:i*d+d], eNew[l*d:l*d+d])
+		}
+		return
+	}
+	gm, err = r.getGenMatrixFromCache(dpHas, dLost)
+	if err != nil {
+		return
+	}
+	return
+}
+
+// according to encoding_matrix & dpHas make a new encoding_matrix
+func (r *RS) makeEncodeMatrix(dpHas []int) (em []byte, err error) {
+	d := r.DataCnt
+	m := make([]byte, d*d)
+	for i, l := range dpHas {
+		copy(m[i*d:i*d+d], r.encodeMatrix[l*d:l*d+d])
+	}
+	em, err = matrix(m).invert(d)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (r *RS) getGenMatrixFromCache(dpHas, dLost []int) (gm []byte, err error) {
+	var bitmap uint64 // indicate dpHas
+	for _, i := range dpHas {
+		bitmap += 1 << uint8(i)
+	}
+	d, lostCnt := r.DataCnt, len(dLost)
+	v, ok := r.Load(bitmap)
+	if ok {
+		im := v.([]byte)
+		gm = make([]byte, lostCnt*d)
+		for i, l := range dLost {
+			copy(gm[i*d:i*d+d], im[l*d:l*d+d])
+		}
+		return
+	}
+	em, err := r.makeEncodeMatrix(dpHas)
+	if err != nil {
+		return
+	}
+	r.Store(bitmap, em)
+	gm = make([]byte, lostCnt*d)
+	for i, l := range dLost {
+		copy(gm[i*d:i*d+d], em[l*d:l*d+d])
+	}
+	return
 }

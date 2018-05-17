@@ -36,8 +36,8 @@
 #define tmp3x  X13
 
 
-// func mulVectAVX2(tbl, d, p []byte)
-TEXT ·mulVectAVX2(SB), NOSPLIT, $0
+// func coeffMulVectAVX2(tbl, d, p []byte)
+TEXT ·coeffMulVectAVX2(SB), NOSPLIT, $0
     MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
@@ -62,13 +62,16 @@ aligned:
     MOVQ         $0, pos
 
 loop256b:
+    // split low/high part(every byte get 4 low/high bit)
 	VMOVDQU (in)(pos*1), in0
 	VPSRLQ  $4, in0, in0_h
 	VPAND   mask, in0_h, in0_h
 	VPAND   mask, in0, in0
+	// according low/high part shuffle table, store result in second dst register
 	VPSHUFB in0_h, high_tbl, in0_h
 	VPSHUFB in0, low_tbl, in0
 	VPXOR   in0, in0_h, in0
+	// store result in memory
 	VMOVDQU in0, (out)(pos*1)
 
     VMOVDQU 32(in)(pos*1), in1
@@ -175,8 +178,8 @@ one16b:
 	JNE      ymm
 	RET
 
-// func mulVectAddAVX2(tbl, d, p []byte)
-TEXT ·mulVectAddAVX2(SB), NOSPLIT, $0
+// func coeffMulVectUpdateAVX2(tbl, d, p []byte)
+TEXT ·coeffMulVectUpdateAVX2(SB), NOSPLIT, $0
     MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
@@ -323,8 +326,8 @@ one16b:
 	JNE      ymm
 	RET
 
-// func mulVectSSSE3(tbl, d, p []byte)
-TEXT ·mulVectSSSE3(SB), NOSPLIT, $0
+// func coeffMulVectSSSE3(tbl, d, p []byte)
+TEXT ·coeffMulVectSSSE3(SB), NOSPLIT, $0
     MOVQ    i+24(FP), in
 	MOVQ    o+48(FP), out
 	MOVQ    tbl+0(FP), tmp0
@@ -355,8 +358,8 @@ loop:
 	JNZ    loop
 	RET
 
-// func mulVectAddSSSE3(tbl, d, p []byte)
-TEXT ·mulVectAddSSSE3(SB), NOSPLIT, $0
+// func coeffMulVectUpdateSSSE3(tbl, d, p []byte)
+TEXT ·coeffMulVectUpdateSSSE3(SB), NOSPLIT, $0
     MOVQ    i+24(FP), in
 	MOVQ    o+48(FP), out
 	MOVQ    tbl+0(FP), tmp0
@@ -388,14 +391,3 @@ loop:
 	SUBQ   $1, len
 	JNZ    loop
 	RET
-
-// func copy32B(dst, src []byte)
-TEXT ·copy32B(SB), NOSPLIT, $0
-    MOVQ dst+0(FP), SI
-    MOVQ src+24(FP), DX
-    MOVOU (DX), X0
-    MOVOU 16(DX), X1
-    MOVOU X0, (SI)
-    MOVOU X1, 16(SI)
-    RET
-	
