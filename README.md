@@ -13,8 +13,8 @@
 
 
 ## Introduction:
-1.  Reed-Solomon Erasure Code engine in pure Go.
-2.  Super Fast: more than 10GB/s per physics core ( 10+4, 4KB per vector, Macbook Pro 2.8 GHz Intel Core i7 )
+1.  Reed-Solomon Erasure Code engine in pure Go.(Based on [intel ISA-L](https://github.com/01org/isa-l) & [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon))
+2.  Fast: more than 10GB/s per physics core ( 10+4, 4KB per vector, Macbook Pro 2.8 GHz Intel Core i7 )
 
 ## Installation
 To get the package use the standard:
