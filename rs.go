@@ -16,21 +16,15 @@ import (
 	"github.com/templexxx/xor"
 )
 
-type (
-	// RS Reed-Solomon Codes Encode/Reconstruct receiver
-	RS struct {
-		DataCnt      int
-		ParityCnt    int
-		cpuFeature   int
-		encodeMatrix matrix // encoding_matrix
-		genMatrix    matrix // generator_matrix
-		inverseCache        // cache inverse_matrix
-	}
-	inverseCache struct {
-		cacheEnabled bool
-		sync.Map
-	}
-)
+type RS struct {
+	DataCnt       int
+	ParityCnt     int
+	cpuFeature    int
+	encodeMatrix  matrix // encoding_matrix
+	genMatrix     matrix // generator_matrix
+	cacheEnabled  bool   // cache inverse_matrix
+	inverseMatrix *sync.Map
+}
 
 // New create an RS
 func New(data, parity int) (r *RS, err error) {
@@ -40,7 +34,7 @@ func New(data, parity int) (r *RS, err error) {
 	}
 	e := genEncMatrix(data, parity)
 	g := e[data*data:]
-	r = &RS{DataCnt: data, ParityCnt: parity, encodeMatrix: e, genMatrix: g}
+	r = &RS{DataCnt: data, ParityCnt: parity, encodeMatrix: e, genMatrix: g, inverseMatrix: new(sync.Map)}
 	r.enableCache()
 	r.getCPUFeature()
 	return
@@ -419,7 +413,7 @@ func (r *RS) getGenMatrixFromCache(dpHas, dLost []int) (gm []byte, err error) {
 		bitmap += 1 << uint8(i)
 	}
 	d, lostCnt := r.DataCnt, len(dLost)
-	v, ok := r.Load(bitmap)
+	v, ok := r.inverseMatrix.Load(bitmap)
 	if ok {
 		im := v.([]byte)
 		gm = make([]byte, lostCnt*d)
@@ -432,7 +426,7 @@ func (r *RS) getGenMatrixFromCache(dpHas, dLost []int) (gm []byte, err error) {
 	if err != nil {
 		return
 	}
-	r.Store(bitmap, em)
+	r.inverseMatrix.Store(bitmap, em)
 	gm = make([]byte, lostCnt*d)
 	for i, l := range dLost {
 		copy(gm[i*d:i*d+d], em[l*d:l*d+d])
