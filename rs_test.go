@@ -215,7 +215,7 @@ func TestEncodeMatrixCache(t *testing.T) {
 		bitmap += 1 << uint8(i)
 	}
 	d, lostCnt := r.DataCnt, len(dLost)
-	v, ok := r.Load(bitmap)
+	v, ok := r.inverseMatrix.Load(bitmap)
 	gmFromCache := make([]byte, lostCnt*d)
 	if ok {
 		im := v.([]byte)
