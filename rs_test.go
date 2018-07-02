@@ -50,7 +50,7 @@ func TestVerifyEncodeBase(t *testing.T) {
 		t.Fatal("vect 8 mismatch")
 	}
 	if vects[9][0] != 110 {
-		t.Fatal("shard 9 mismatch")
+		t.Fatal("vect 9 mismatch")
 	}
 }
 
