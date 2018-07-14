@@ -56,11 +56,11 @@ func TestVerifyEncodeBase(t *testing.T) {
 
 func TestVerifyEncodeSIMD(t *testing.T) {
 	d, p := testDataCnt, testParityCnt
-	if cpu.X86.HasAVX2 {
+	if cpu.X86.HasAVX512 {
+		verifyEncodeSIMD(t, d, p, avx512)
 		verifyEncodeSIMD(t, d, p, avx2)
-		verifyEncodeSIMD(t, d, p, ssse3)
-	} else if cpu.X86.HasSSSE3 {
-		verifyEncodeSIMD(t, d, p, ssse3)
+	} else if cpu.X86.HasAVX2 {
+		verifyEncodeSIMD(t, d, p, avx2)
 	} else {
 		t.Log("not support SIMD")
 	}
@@ -86,12 +86,12 @@ func verifyEncodeSIMD(t *testing.T, d, p, cpuFeature int) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		r.cpuFeature = cpuFeature
+		r.cpu = cpuFeature
 		err = r.Encode(result)
 		if err != nil {
 			t.Fatal(err)
 		}
-		r.cpuFeature = base
+		r.cpu = base
 		err = r.Encode(expect)
 		if err != nil {
 			t.Fatal(err)

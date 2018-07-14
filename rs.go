@@ -1,7 +1,7 @@
 /*
 	Reed-Solomon Codes over GF(2^8)
 	Primitive Polynomial:  x^8+x^4+x^3+x^2+1
-	Galois Filed arithmetic using Intel SIMD instructions (AVX2 or SSSE3)
+	Galois Filed arithmetic using Intel SIMD instructions (AVX2)
 	Platform: X86-64 (amd64)
 */
 
@@ -16,27 +16,47 @@ import (
 	"github.com/templexxx/xor"
 )
 
+// RS Reed-Solomon Codes receiver
 type RS struct {
 	DataCnt       int
 	ParityCnt     int
-	cpuFeature    int
+	cpu           int
 	encodeMatrix  matrix // encoding_matrix
 	genMatrix     matrix // generator_matrix
 	cacheEnabled  bool   // cache inverse_matrix
 	inverseMatrix *sync.Map
 }
 
+// CPU Features
+const (
+	base = iota
+	avx2
+	avx512
+)
+
 // New create an RS
-func New(data, parity int) (r *RS, err error) {
-	err = checkCfg(data, parity)
+func New(dataCnt, parityCnt int) (r *RS, err error) {
+
+	err = checkCfg(dataCnt, parityCnt)
 	if err != nil {
 		return
 	}
-	e := genEncMatrix(data, parity)
-	g := e[data*data:]
-	r = &RS{DataCnt: data, ParityCnt: parity, encodeMatrix: e, genMatrix: g, inverseMatrix: new(sync.Map)}
+
+	e := genEncMatrix(dataCnt, parityCnt)
+	g := e[dataCnt*dataCnt:]
+	r = &RS{DataCnt: dataCnt, ParityCnt: parityCnt,
+		encodeMatrix: e, genMatrix: g, inverseMatrix: new(sync.Map)}
 	r.enableCache()
-	r.getCPUFeature()
+
+	switch {
+	case cpu.X86.HasAVX512:
+		r.cpu = avx512
+	case cpu.X86.HasAVX2:
+		r.cpu = avx2
+	default:
+		r.cpu = base
+	}
+
 	return
 }
 
@@ -55,26 +75,10 @@ func checkCfg(d, p int) error {
 
 // At most 20475 inverse_matrix (when data=28, parity=4)
 func (r *RS) enableCache() {
-	if r.DataCnt < 29 && r.ParityCnt < 5 { // data+parity can't be bigger than 32 (tips: see the codes about make inverse matrix)
+	if r.DataCnt < 29 && r.ParityCnt < 5 { // data+parity can't be bigger than 64 (tips: see the codes about make inverse matrix)
 		r.cacheEnabled = true
 	} else {
 		r.cacheEnabled = false
-	}
-}
-
-const (
-	base = iota
-	ssse3
-	avx2
-)
-
-func (r *RS) getCPUFeature() {
-	if cpu.X86.HasAVX2 {
-		r.cpuFeature = avx2
-	} else if cpu.X86.HasSSSE3 {
-		r.cpuFeature = ssse3
-	} else {
-		r.cpuFeature = base
 	}
 }
 
@@ -146,7 +150,7 @@ func getSplitSize(n int) int {
 func (r *RS) encodePart(start, end int, dataVects, parityVects [][]byte, updateOnly bool) {
 	undoneSize := end - start
 	splitSize := (undoneSize >> 4) << 4 // splitSize could be 0(when undoneSize < 16)
-	d, p, g, cF := r.DataCnt, r.ParityCnt, r.genMatrix, r.cpuFeature
+	d, p, g, cF := r.DataCnt, r.ParityCnt, r.genMatrix, r.cpu
 	if splitSize >= 16 {
 		end2 := start + splitSize
 		for i := 0; i < d; i++ {
@@ -232,7 +236,7 @@ func (r *RS) UpdateParity(oldData []byte, newData []byte, updateRow int, parity 
 		updateGenMatrix[i] = c
 		updateVects[i+1] = parity[i]
 	}
-	updateRS := &RS{DataCnt: 1, ParityCnt: r.ParityCnt, genMatrix: updateGenMatrix, cpuFeature: r.cpuFeature}
+	updateRS := &RS{DataCnt: 1, ParityCnt: r.ParityCnt, genMatrix: updateGenMatrix, cpu: r.cpu}
 	updateRS.encode(updateVects, true)
 	return nil
 }
@@ -283,7 +287,7 @@ func (r *RS) reconstData(vects [][]byte, dpHas, dNeedReconst []int) (err error) 
 	if err != nil {
 		return
 	}
-	rTmp := &RS{DataCnt: d, ParityCnt: lostCnt, genMatrix: g, cpuFeature: r.cpuFeature}
+	rTmp := &RS{DataCnt: d, ParityCnt: lostCnt, genMatrix: g, cpu: r.cpu}
 	err = rTmp.Encode(vTmp)
 	if err != nil {
 		return
@@ -305,7 +309,7 @@ func (r *RS) reconstParity(vects [][]byte, lost []int) (err error) {
 	for i, p := range lost {
 		vTmp[i+d] = vects[p]
 	}
-	rTmp := &RS{DataCnt: d, ParityCnt: lostCnt, genMatrix: g, cpuFeature: r.cpuFeature}
+	rTmp := &RS{DataCnt: d, ParityCnt: lostCnt, genMatrix: g, cpu: r.cpu}
 	err = rTmp.Encode(vTmp)
 	if err != nil {
 		return
