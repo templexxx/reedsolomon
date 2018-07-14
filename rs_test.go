@@ -12,15 +12,15 @@ import (
 const (
 	kb            = 1024
 	mb            = 1024 * 1024
-	testDataCnt   = 14
+	testDataCnt   = 10
 	testParityCnt = 4
 	// 256: avx_loop/sse_loop, 32: ymm_register/xmm_register, 16: ymm_register/xmm_register, 8: byte by byte
-	verifySize    = 256 + 32 + 16 + 8
+	verifySize    = 512 + 256 + 32 + 16 + 8
 	testUpdateRow = 3
 )
 
 var (
-	testDPHas       = []int{10, 8, 5, 6, 7, 4, 2, 12, 13, 1, 14, 15, 16, 17}
+	testDPHas       = []int{10, 8, 5, 6, 7, 4, 2, 12, 13, 1}
 	testNeedReconst = []int{3, 9, 0, 11}
 )
 
@@ -271,7 +271,7 @@ func benchEnc(b *testing.B, d, p, size int) {
 }
 
 func BenchmarkReconst(b *testing.B) {
-	sizes := []int{4 * kb, 4 * mb}
+	sizes := []int{4 * kb, 64 * kb, 1 * mb}
 	b.Run("", benchmarkReconst(benchReconst, testDataCnt, testParityCnt, sizes, testDPHas, testNeedReconst))
 }
 
