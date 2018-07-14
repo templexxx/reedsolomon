@@ -1,6 +1,6 @@
 language: go
 go:
-    - go1.11
+  - master
 
 install:
     - go get github.com/templexxx/reedsolomon
