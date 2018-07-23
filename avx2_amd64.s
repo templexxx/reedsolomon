@@ -35,46 +35,47 @@
 #define tmp2x  X12
 #define tmp3x  X13
 
-
 // func coeffMulVectAVX2(tbl, d, p []byte)
 TEXT ·coeffMulVectAVX2(SB), NOSPLIT, $0
-    MOVQ         i+24(FP), in
+	MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), low_tblx
 	VMOVDQU      16(tmp0), high_tblx
 	MOVB         $0x0f, DX
-	LONG         $0x2069e3c4; WORD $0x00d2   // VPINSRB $0x00, EDX, XMM2, XMM2
+	LONG         $0x2069e3c4; WORD $0x00d2 // VPINSRB $0x00, EDX, XMM2, XMM2
 	VPBROADCASTB maskx, maskx
 	MOVQ         in_len+32(FP), len
 	TESTQ        $31, len
 	JNZ          one16b
 
 ymm:
-    VINSERTI128  $1, low_tblx, low_tbl, low_tbl
-    VINSERTI128  $1, high_tblx, high_tbl, high_tbl
-    VINSERTI128  $1, maskx, mask, mask
-    TESTQ        $255, len
-    JNZ          not_aligned
+	VINSERTI128 $1, low_tblx, low_tbl, low_tbl
+	VINSERTI128 $1, high_tblx, high_tbl, high_tbl
+	VINSERTI128 $1, maskx, mask, mask
+	TESTQ       $255, len
+	JNZ         not_aligned
 
-// 256bytes/loop
+	// 256bytes/loop
 aligned:
-    MOVQ         $0, pos
+	MOVQ $0, pos
 
 loop256b:
-    // split low/high part(every byte get 4 low/high bit)
+	// split low/high part(every byte get 4 low/high bit)
 	VMOVDQU (in)(pos*1), in0
 	VPSRLQ  $4, in0, in0_h
 	VPAND   mask, in0_h, in0_h
 	VPAND   mask, in0, in0
+
 	// according low/high part shuffle table, store result in second dst register
 	VPSHUFB in0_h, high_tbl, in0_h
 	VPSHUFB in0, low_tbl, in0
 	VPXOR   in0, in0_h, in0
+
 	// store result in memory
 	VMOVDQU in0, (out)(pos*1)
 
-    VMOVDQU 32(in)(pos*1), in1
+	VMOVDQU 32(in)(pos*1), in1
 	VPSRLQ  $4, in1, in1_h
 	VPAND   mask, in1_h, in1_h
 	VPAND   mask, in1, in1
@@ -83,7 +84,7 @@ loop256b:
 	VPXOR   in1, in1_h, in1
 	VMOVDQU in1, 32(out)(pos*1)
 
-    VMOVDQU 64(in)(pos*1), in2
+	VMOVDQU 64(in)(pos*1), in2
 	VPSRLQ  $4, in2, in2_h
 	VPAND   mask, in2_h, in2_h
 	VPAND   mask, in2, in2
@@ -92,7 +93,7 @@ loop256b:
 	VPXOR   in2, in2_h, in2
 	VMOVDQU in2, 64(out)(pos*1)
 
-    VMOVDQU 96(in)(pos*1), in3
+	VMOVDQU 96(in)(pos*1), in3
 	VPSRLQ  $4, in3, in3_h
 	VPAND   mask, in3_h, in3_h
 	VPAND   mask, in3, in3
@@ -101,7 +102,7 @@ loop256b:
 	VPXOR   in3, in3_h, in3
 	VMOVDQU in3, 96(out)(pos*1)
 
-    VMOVDQU 128(in)(pos*1), in4
+	VMOVDQU 128(in)(pos*1), in4
 	VPSRLQ  $4, in4, in4_h
 	VPAND   mask, in4_h, in4_h
 	VPAND   mask, in4, in4
@@ -110,7 +111,7 @@ loop256b:
 	VPXOR   in4, in4_h, in4
 	VMOVDQU in4, 128(out)(pos*1)
 
-    VMOVDQU 160(in)(pos*1), in5
+	VMOVDQU 160(in)(pos*1), in5
 	VPSRLQ  $4, in5, in5_h
 	VPAND   mask, in5_h, in5_h
 	VPAND   mask, in5, in5
@@ -119,7 +120,7 @@ loop256b:
 	VPXOR   in5, in5_h, in5
 	VMOVDQU in5, 160(out)(pos*1)
 
-    VMOVDQU 192(in)(pos*1), in0
+	VMOVDQU 192(in)(pos*1), in0
 	VPSRLQ  $4, in0, in0_h
 	VPAND   mask, in0_h, in0_h
 	VPAND   mask, in0, in0
@@ -128,7 +129,7 @@ loop256b:
 	VPXOR   in0, in0_h, in0
 	VMOVDQU in0, 192(out)(pos*1)
 
-    VMOVDQU 224(in)(pos*1), in1
+	VMOVDQU 224(in)(pos*1), in1
 	VPSRLQ  $4, in1, in1_h
 	VPAND   mask, in1_h, in1_h
 	VPAND   mask, in1, in1
@@ -137,18 +138,18 @@ loop256b:
 	VPXOR   in1, in1_h, in1
 	VMOVDQU in1, 224(out)(pos*1)
 
-	ADDQ    $256, pos
-	CMPQ    len, pos
-	JNE     loop256b
+	ADDQ $256, pos
+	CMPQ len, pos
+	JNE  loop256b
 	VZEROUPPER
 	RET
 
 not_aligned:
-    MOVQ    len, tmp0
-    ANDQ    $255, tmp0
+	MOVQ len, tmp0
+	ANDQ $255, tmp0
 
 loop32b:
-    VMOVDQU -32(in)(len*1), in0
+	VMOVDQU -32(in)(len*1), in0
 	VPSRLQ  $4, in0, in0_h
 	VPAND   mask, in0_h, in0_h
 	VPAND   mask, in0, in0
@@ -165,22 +166,22 @@ loop32b:
 	RET
 
 one16b:
-    VMOVDQU  -16(in)(len*1), in0x
-    VPSRLQ   $4, in0x, in0_hx
-    VPAND    maskx, in0x, in0x
-    VPAND    maskx, in0_hx, in0_hx
-    VPSHUFB  in0_hx, high_tblx, in0_hx
-    VPSHUFB  in0x, low_tblx, in0x
-    VPXOR    in0x, in0_hx, in0x
-	VMOVDQU  in0x, -16(out)(len*1)
-	SUBQ     $16, len
-	CMPQ     len, $0
-	JNE      ymm
+	VMOVDQU -16(in)(len*1), in0x
+	VPSRLQ  $4, in0x, in0_hx
+	VPAND   maskx, in0x, in0x
+	VPAND   maskx, in0_hx, in0_hx
+	VPSHUFB in0_hx, high_tblx, in0_hx
+	VPSHUFB in0x, low_tblx, in0x
+	VPXOR   in0x, in0_hx, in0x
+	VMOVDQU in0x, -16(out)(len*1)
+	SUBQ    $16, len
+	CMPQ    len, $0
+	JNE     ymm
 	RET
 
 // func coeffMulVectUpdateAVX2(tbl, d, p []byte)
 TEXT ·coeffMulVectUpdateAVX2(SB), NOSPLIT, $0
-    MOVQ         i+24(FP), in
+	MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
 	VMOVDQU      (tmp0), low_tblx
@@ -193,17 +194,17 @@ TEXT ·coeffMulVectUpdateAVX2(SB), NOSPLIT, $0
 	JNZ          one16b
 
 ymm:
-    VINSERTI128  $1, low_tblx, low_tbl, low_tbl
-    VINSERTI128  $1, high_tblx, high_tbl, high_tbl
-    VINSERTI128  $1, maskx, mask, mask
-    TESTQ        $255, len
-    JNZ          not_aligned
+	VINSERTI128 $1, low_tblx, low_tbl, low_tbl
+	VINSERTI128 $1, high_tblx, high_tbl, high_tbl
+	VINSERTI128 $1, maskx, mask, mask
+	TESTQ       $255, len
+	JNZ         not_aligned
 
 aligned:
-    MOVQ         $0, pos
+	MOVQ $0, pos
 
 loop256b:
-    VMOVDQU (in)(pos*1), in0
+	VMOVDQU (in)(pos*1), in0
 	VPSRLQ  $4, in0, in0_h
 	VPAND   mask, in0_h, in0_h
 	VPAND   mask, in0, in0
@@ -213,7 +214,7 @@ loop256b:
 	VPXOR   (out)(pos*1), in0, in0
 	VMOVDQU in0, (out)(pos*1)
 
-    VMOVDQU 32(in)(pos*1), in1
+	VMOVDQU 32(in)(pos*1), in1
 	VPSRLQ  $4, in1, in1_h
 	VPAND   mask, in1_h, in1_h
 	VPAND   mask, in1, in1
@@ -223,7 +224,7 @@ loop256b:
 	VPXOR   32(out)(pos*1), in1, in1
 	VMOVDQU in1, 32(out)(pos*1)
 
-    VMOVDQU 64(in)(pos*1), in2
+	VMOVDQU 64(in)(pos*1), in2
 	VPSRLQ  $4, in2, in2_h
 	VPAND   mask, in2_h, in2_h
 	VPAND   mask, in2, in2
@@ -233,7 +234,7 @@ loop256b:
 	VPXOR   64(out)(pos*1), in2, in2
 	VMOVDQU in2, 64(out)(pos*1)
 
-    VMOVDQU 96(in)(pos*1), in3
+	VMOVDQU 96(in)(pos*1), in3
 	VPSRLQ  $4, in3, in3_h
 	VPAND   mask, in3_h, in3_h
 	VPAND   mask, in3, in3
@@ -243,7 +244,7 @@ loop256b:
 	VPXOR   96(out)(pos*1), in3, in3
 	VMOVDQU in3, 96(out)(pos*1)
 
-    VMOVDQU 128(in)(pos*1), in4
+	VMOVDQU 128(in)(pos*1), in4
 	VPSRLQ  $4, in4, in4_h
 	VPAND   mask, in4_h, in4_h
 	VPAND   mask, in4, in4
@@ -253,7 +254,7 @@ loop256b:
 	VPXOR   128(out)(pos*1), in4, in4
 	VMOVDQU in4, 128(out)(pos*1)
 
-    VMOVDQU 160(in)(pos*1), in5
+	VMOVDQU 160(in)(pos*1), in5
 	VPSRLQ  $4, in5, in5_h
 	VPAND   mask, in5_h, in5_h
 	VPAND   mask, in5, in5
@@ -263,7 +264,7 @@ loop256b:
 	VPXOR   160(out)(pos*1), in5, in5
 	VMOVDQU in5, 160(out)(pos*1)
 
-    VMOVDQU 192(in)(pos*1), in0
+	VMOVDQU 192(in)(pos*1), in0
 	VPSRLQ  $4, in0, in0_h
 	VPAND   mask, in0_h, in0_h
 	VPAND   mask, in0, in0
@@ -273,7 +274,7 @@ loop256b:
 	VPXOR   192(out)(pos*1), in0, in0
 	VMOVDQU in0, 192(out)(pos*1)
 
-    VMOVDQU 224(in)(pos*1), in1
+	VMOVDQU 224(in)(pos*1), in1
 	VPSRLQ  $4, in1, in1_h
 	VPAND   mask, in1_h, in1_h
 	VPAND   mask, in1, in1
@@ -283,18 +284,18 @@ loop256b:
 	VPXOR   224(out)(pos*1), in1, in1
 	VMOVDQU in1, 224(out)(pos*1)
 
-	ADDQ    $256, pos
-	CMPQ    len, pos
-	JNE     loop256b
+	ADDQ $256, pos
+	CMPQ len, pos
+	JNE  loop256b
 	VZEROUPPER
 	RET
 
 not_aligned:
-    MOVQ    len, tmp0
-    ANDQ    $255, tmp0
+	MOVQ len, tmp0
+	ANDQ $255, tmp0
 
 loop32b:
-    VMOVDQU -32(in)(len*1), in0
+	VMOVDQU -32(in)(len*1), in0
 	VPSRLQ  $4, in0, in0_h
 	VPAND   mask, in0_h, in0_h
 	VPAND   mask, in0, in0
@@ -312,16 +313,16 @@ loop32b:
 	RET
 
 one16b:
-    VMOVDQU  -16(in)(len*1), in0x
-    VPSRLQ   $4, in0x, in0_hx
-    VPAND    maskx, in0x, in0x
-    VPAND    maskx, in0_hx, in0_hx
-    VPSHUFB  in0_hx, high_tblx, in0_hx
-    VPSHUFB  in0x, low_tblx, in0x
-    VPXOR    in0x, in0_hx, in0x
-    VPXOR    -16(out)(len*1), in0x, in0x
-	VMOVDQU  in0x, -16(out)(len*1)
-	SUBQ     $16, len
-	CMPQ     len, $0
-	JNE      ymm
+	VMOVDQU -16(in)(len*1), in0x
+	VPSRLQ  $4, in0x, in0_hx
+	VPAND   maskx, in0x, in0x
+	VPAND   maskx, in0_hx, in0_hx
+	VPSHUFB in0_hx, high_tblx, in0_hx
+	VPSHUFB in0x, low_tblx, in0x
+	VPXOR   in0x, in0_hx, in0x
+	VPXOR   -16(out)(len*1), in0x, in0x
+	VMOVDQU in0x, -16(out)(len*1)
+	SUBQ    $16, len
+	CMPQ    len, $0
+	JNE     ymm
 	RET
