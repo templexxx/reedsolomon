@@ -12,7 +12,7 @@ import (
 	"sort"
 	"sync"
 
-	cpu "github.com/templexxx/cpufeat"
+	"github.com/templexxx/cpu"
 	"github.com/templexxx/xor"
 )
 
@@ -34,6 +34,8 @@ const (
 	avx512
 )
 
+var EnableAVX512 = false
+
 // New create an RS
 func New(dataCnt, parityCnt int) (r *RS, err error) {
 
@@ -48,16 +50,38 @@ func New(dataCnt, parityCnt int) (r *RS, err error) {
 		encodeMatrix: e, genMatrix: g, inverseMatrix: new(sync.Map)}
 	r.enableCache()
 
-	switch {
-	case cpu.X86.HasAVX512:
-		r.cpu = avx512
-	case cpu.X86.HasAVX2:
-		r.cpu = avx2
-	default:
-		r.cpu = base
-	}
+	r.cpu = getCPUFeature()
 
 	return
+}
+
+func getCPUFeature() int {
+	if useAVX512() {
+		return avx512
+	} else if cpu.X86.HasAVX2 {
+		return avx2
+	} else {
+		return base
+	}
+}
+
+func useAVX512() (ok bool) {
+	if !cpu.X86.HasAVX512VL {
+		return
+	}
+	if !cpu.X86.HasAVX512BW {
+		return
+	}
+	if !cpu.X86.HasAVX512F {
+		return
+	}
+	if !cpu.X86.HasAVX512DQ {
+		return
+	}
+	if !EnableAVX512 {
+		return
+	}
+	return true
 }
 
 var ErrMinVects = errors.New("data or parity <= 0")
