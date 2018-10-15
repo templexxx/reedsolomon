@@ -97,7 +97,7 @@ func checkCfg(d, p int) error {
 	return nil
 }
 
-// At most 20475 inverse_matrix (when data=28, parity=4)
+// At most 35960 inverse_matrix (when data=28, parity=4)
 func (r *RS) enableCache() {
 	if r.DataCnt < 29 && r.ParityCnt < 5 { // data+parity can't be bigger than 64 (tips: see the codes about make inverse matrix)
 		r.cacheEnabled = true
