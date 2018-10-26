@@ -281,6 +281,12 @@ func (r *RS) Reconst(vects [][]byte, dpHas, needReconst []int) (err error) {
 		return
 	}
 	sort.Ints(dpHas)
+	// make sure we have right data vects for encode
+	for i := 0; i < r.DataCnt; i++ {
+		if !isIn(i, dpHas) && !isIn(i, needReconst) {
+			needReconst = append(needReconst, i)
+		}
+	}
 	dNeedReconst, pNeedReconst := SplitNeedReconst(r.DataCnt, needReconst)
 	if len(dNeedReconst) != 0 {
 		err = r.reconstData(vects, dpHas, dNeedReconst)

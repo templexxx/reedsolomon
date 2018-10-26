@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	cpu "github.com/templexxx/cpufeat"
 )
@@ -147,6 +148,84 @@ func verifyReconst(t *testing.T, d, p int, dpHas, needReconst []int) {
 			}
 		}
 	}
+}
+
+// reconst part of lost
+func TestVerifyReconstPart(t *testing.T) {
+	d, p := 5, 3
+	for i := 0; i < 1024; i++ {
+		lost := makeLost(d, p)
+		for j := 0; j <= p; j++ {
+			for _, l := range lost[:j] {
+				testVerifyReconstPart(t, d, p, lost[:j], l)
+			}
+		}
+	}
+}
+
+func testVerifyReconstPart(t *testing.T, d, p int, lost []int, needReconst int) {
+	size := 2
+	expect := make([][]byte, d+p)
+	result := make([][]byte, d+p)
+	for j := 0; j < d+p; j++ {
+		expect[j] = make([]byte, size)
+		result[j] = make([]byte, size)
+	}
+	for j := 0; j < d; j++ {
+		rand.Seed(time.Now().UnixNano())
+		fillRandom(expect[j])
+	}
+	r, err := New(d, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = r.Encode(expect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dpHas := makeDPHas(d, p, lost)
+	for _, h := range dpHas {
+		copy(result[h], expect[h])
+	}
+	err = r.Reconst(result, dpHas, []int{needReconst})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(expect[needReconst], result[needReconst]) {
+		t.Fatal("lost:", lost, "needReconst:", needReconst)
+	}
+
+}
+
+func makeDPHas(dataCnt, parityCnt int, needReconst []int) []int {
+	dpHas := make([]int, dataCnt)
+	for i := range dpHas {
+		for j := 0; j < dataCnt+parityCnt; j++ {
+			if !isIn(j, needReconst) {
+				if !isIn(j, dpHas) {
+					dpHas[i] = j
+				}
+			}
+		}
+	}
+	return dpHas
+}
+
+func makeLost(dataCnt, parityCnt int) []int {
+	needReconst := make([]int, parityCnt)
+	off := 0
+	rand.Seed(time.Now().UnixNano())
+	for {
+		if off == parityCnt-1 {
+			break
+		}
+		n := rand.Intn(dataCnt + parityCnt)
+		if !isIn(n, needReconst) {
+			needReconst[off] = n
+			off++
+		}
+	}
+	return needReconst
 }
 
 func TestVerifyUpdateParity(t *testing.T) {
