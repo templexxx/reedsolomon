@@ -2,12 +2,14 @@ package reedsolomon
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"fmt"
+	"io"
 	"math/rand"
 	"testing"
 	"time"
 
-	cpu "github.com/templexxx/cpufeat"
+	"github.com/templexxx/cpu"
 )
 
 const (
@@ -57,7 +59,7 @@ func TestVerifyEncodeBase(t *testing.T) {
 
 func TestVerifyEncodeSIMD(t *testing.T) {
 	d, p := testDataCnt, testParityCnt
-	if cpu.X86.HasAVX512 {
+	if hasAVX512() {
 		verifyEncodeSIMD(t, d, p, avx512)
 		verifyEncodeSIMD(t, d, p, avx2)
 	} else if cpu.X86.HasAVX2 {
@@ -79,8 +81,10 @@ func verifyEncodeSIMD(t *testing.T, d, p, cpuFeature int) {
 			expect[j], result[j] = make([]byte, size), make([]byte, size)
 		}
 		for j := 0; j < d; j++ {
-			rand.Seed(int64(j))
-			fillRandom(expect[j])
+			err := fillRandom(expect[j])
+			if err != nil {
+				t.Fatal(err)
+			}
 			copy(result[j], expect[j])
 		}
 		r, err := New(d, p)
@@ -127,8 +131,10 @@ func verifyReconst(t *testing.T, d, p int, dpHas, needReconst []int) {
 			expect[j], result[j] = make([]byte, size), make([]byte, size)
 		}
 		for j := 0; j < d; j++ {
-			rand.Seed(int64(j))
-			fillRandom(expect[j])
+			err := fillRandom(expect[j])
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		r, err := New(d, p)
 		err = r.Encode(expect)
@@ -172,8 +178,10 @@ func testVerifyReconstPart(t *testing.T, d, p int, lost []int, needReconst int) 
 		result[j] = make([]byte, size)
 	}
 	for j := 0; j < d; j++ {
-		rand.Seed(time.Now().UnixNano())
-		fillRandom(expect[j])
+		err := fillRandom(expect[j])
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	r, err := New(d, p)
 	if err != nil {
@@ -241,8 +249,10 @@ func verifyUpdate(t *testing.T, d, p, updateRow int) {
 			updateRet[j], encodeRet[j] = make([]byte, size), make([]byte, size)
 		}
 		for j := 0; j < d; j++ {
-			rand.Seed(int64(j))
-			fillRandom(encodeRet[j])
+			err := fillRandom(encodeRet[j])
+			if err != nil {
+				t.Fatal(err)
+			}
 			copy(updateRet[j], encodeRet[j])
 		}
 		r, err := New(d, p)
@@ -254,7 +264,10 @@ func verifyUpdate(t *testing.T, d, p, updateRow int) {
 			t.Fatal(err)
 		}
 		newData := make([]byte, size)
-		fillRandom(newData)
+		err = fillRandom(newData)
+		if err != nil {
+			t.Fatal(err)
+		}
 		err = r.Update(updateRet[updateRow], newData, updateRow, updateRet[d:d+p])
 		if err != nil {
 			t.Fatal(err)
@@ -328,8 +341,10 @@ func benchEnc(b *testing.B, d, p, size int) {
 		vects[j] = make([]byte, size)
 	}
 	for j := 0; j < d; j++ {
-		rand.Seed(int64(j))
-		fillRandom(vects[j])
+		err := fillRandom(vects[j])
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 	r, err := New(d, p)
 	if err != nil {
@@ -371,8 +386,10 @@ func benchReconst(b *testing.B, d, p, size int, has, needReconst []int) {
 		vects[j] = make([]byte, size)
 	}
 	for j := 0; j < d; j++ {
-		rand.Seed(int64(j))
-		fillRandom(vects[j])
+		err := fillRandom(vects[j])
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 	r, err := New(d, p)
 	if err != nil {
@@ -417,8 +434,10 @@ func benchUpdateParity(b *testing.B, d, p, size, updateRow int) {
 		vects[j] = make([]byte, size)
 	}
 	for j := 0; j < d; j++ {
-		rand.Seed(int64(j))
-		fillRandom(vects[j])
+		err := fillRandom(vects[j])
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 	r, err := New(d, p)
 	if err != nil {
@@ -429,7 +448,10 @@ func benchUpdateParity(b *testing.B, d, p, size, updateRow int) {
 		b.Fatal(err)
 	}
 	newData := make([]byte, size)
-	fillRandom(newData)
+	err = fillRandom(newData)
+	if err != nil {
+		b.Fatal(err)
+	}
 	err = r.Update(vects[updateRow], newData, updateRow, vects[d:])
 	if err != nil {
 		b.Fatal(err)
@@ -444,12 +466,7 @@ func benchUpdateParity(b *testing.B, d, p, size, updateRow int) {
 	}
 }
 
-func fillRandom(v []byte) {
-	for i := 0; i < len(v); i += 7 {
-		val := rand.Int63()
-		for j := 0; i+j < len(v) && j < 7; j++ {
-			v[i+j] = byte(val)
-			val >>= 8
-		}
-	}
+func fillRandom(v []byte)(err error) {
+	_, err = io.ReadFull(crand.Reader, v)
+	return
 }

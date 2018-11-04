@@ -13,7 +13,7 @@ import (
 	"sync"
 
 	"github.com/templexxx/cpu"
-	"github.com/templexxx/xor"
+	xor "github.com/templexxx/xorsimd"
 )
 
 // RS Reed-Solomon Codes receiver
@@ -66,6 +66,16 @@ func getCPUFeature() int {
 }
 
 func useAVX512() (ok bool) {
+	if !hasAVX512() {
+		return
+	}
+	if !useAVX512() {
+		return
+	}
+	return true
+}
+
+func hasAVX512() (ok bool) {
 	if !cpu.X86.HasAVX512VL {
 		return
 	}
@@ -76,9 +86,6 @@ func useAVX512() (ok bool) {
 		return
 	}
 	if !cpu.X86.HasAVX512DQ {
-		return
-	}
-	if !EnableAVX512 {
 		return
 	}
 	return true
@@ -247,7 +254,7 @@ func (r *RS) Update(oldData []byte, newData []byte, updateRow int, parity [][]by
 
 	// step1: buf (old_data xor new_data)
 	buf := make([]byte, size)
-	xor.Matrix(buf, [][]byte{oldData, newData})
+	xor.Encode(buf, [][]byte{oldData, newData})
 	// step2: reEnc parity
 	updateVects := make([][]byte, 1+r.ParityCnt)
 	updateVects[0] = buf
