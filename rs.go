@@ -219,7 +219,7 @@ var ErrIllegalUpdateSize = errors.New("illegal update size")
 var ErrIllegalUpdateRow = errors.New("illegal update row")
 
 // UpdateParity update parity_data when one data_vect changes
-func (r *RS) UpdateParity(oldData []byte, newData []byte, updateRow int, parity [][]byte) (err error) {
+func (r *RS) Update(oldData []byte, newData []byte, updateRow int, parity [][]byte) (err error) {
 	// check args
 	if len(parity) != r.ParityCnt {
 		err = ErrMismatchParityCnt
@@ -281,7 +281,7 @@ func (r *RS) Reconst(vects [][]byte, dpHas, needReconst []int) (err error) {
 		return
 	}
 	sort.Ints(dpHas)
-	// make sure we have right data vects for encode
+	// make sure we have right data vects for reconst parity
 	for i := 0; i < r.DataCnt; i++ {
 		if !isIn(i, dpHas) && !isIn(i, needReconst) {
 			needReconst = append(needReconst, i)

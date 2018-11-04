@@ -228,12 +228,12 @@ func makeLost(dataCnt, parityCnt int) []int {
 	return needReconst
 }
 
-func TestVerifyUpdateParity(t *testing.T) {
-	verifyUpdateParity(t, testDataCnt, testParityCnt, testUpdateRow)
+func TestVerifyUpdate(t *testing.T) {
+	verifyUpdate(t, testDataCnt, testParityCnt, testUpdateRow)
 }
 
 // compare encode&update results
-func verifyUpdateParity(t *testing.T, d, p, updateRow int) {
+func verifyUpdate(t *testing.T, d, p, updateRow int) {
 	for size := 1; size <= verifySize; size++ {
 		updateRet := make([][]byte, d+p)
 		encodeRet := make([][]byte, d+p)
@@ -255,7 +255,7 @@ func verifyUpdateParity(t *testing.T, d, p, updateRow int) {
 		}
 		newData := make([]byte, size)
 		fillRandom(newData)
-		err = r.UpdateParity(updateRet[updateRow], newData, updateRow, updateRet[d:d+p])
+		err = r.Update(updateRet[updateRow], newData, updateRow, updateRet[d:d+p])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -430,14 +430,14 @@ func benchUpdateParity(b *testing.B, d, p, size, updateRow int) {
 	}
 	newData := make([]byte, size)
 	fillRandom(newData)
-	err = r.UpdateParity(vects[updateRow], newData, updateRow, vects[d:])
+	err = r.Update(vects[updateRow], newData, updateRow, vects[d:])
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.SetBytes(int64(d * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err = r.UpdateParity(vects[updateRow], newData, updateRow, vects[d:])
+		err = r.Update(vects[updateRow], newData, updateRow, vects[d:])
 		if err != nil {
 			b.Fatal(err)
 		}
