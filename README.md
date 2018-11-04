@@ -64,6 +64,7 @@ And we must know the benchmark test is quite different with encoding/decoding in
 Because in benchmark test loops, the CPU Cache will help a lot. In practice, we must reuse the memory to make the performance become as good as the benchmark test.
 
 Example of performance on my AWS c5d.large (Intel(R) Xeon(R) Platinum 8124M CPU @ 3.00GHz.)
+DataCnt = 10; ParityCnt = 4
 
 ### Encoding:
 
