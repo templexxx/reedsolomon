@@ -1,4 +1,7 @@
-// Reference: www.ssrc.ucsc.edu/Papers/plank-fast13.pdf
+// Copyright (c) 2017 Temple3x (temple3x@gmail.com)
+//
+// Use of this source code is governed by the MIT License
+// that can be found in the LICENSE file.
 
 #include "textflag.h"
 
@@ -38,8 +41,8 @@
 
 #define tmp0 R10
 
-// func coeffMulVectAVX512(tbl, d, p []byte)
-TEXT ·coeffMulVectAVX512(SB), NOSPLIT, $0
+// func mulVectAVX512(tbl, d, p []byte)
+TEXT ·mulVectAVX512(SB), NOSPLIT, $0
 	MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
@@ -198,8 +201,8 @@ one16b:
 	JNE     big
 	RET
 
-// func coeffMulVectUpdateAVX512(tbl, d, p []byte)
-TEXT ·coeffMulVectUpdateAVX512(SB), NOSPLIT, $0
+// func mulVectXORAVX512(tbl, d, p []byte)
+TEXT ·mulVectXORAVX512(SB), NOSPLIT, $0
 	MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0

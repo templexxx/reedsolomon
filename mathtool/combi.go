@@ -1,3 +1,11 @@
+// Copyright (c) 2017 Temple3x (temple3x@gmail.com)
+//
+// Use of this source code is governed by the MIT License
+// that can be found in the LICENSE file.
+
+// This tools will calculate the number of inverse matrices
+// with specific data & parity number.
+// ( It's combination actually)
 package main
 
 import (
@@ -36,7 +44,7 @@ func main() {
 }
 
 func getMAXCCombination(a uint64) uint64 {
-	b := a / 2 // proved in mathtool/combination.jpg
+	b := a / 2 // Proved in combination.jpg
 	return getCCombination(a, b)
 }
 

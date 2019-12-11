@@ -1,3 +1,10 @@
+// Copyright (c) 2017 Temple3x (temple3x@gmail.com)
+//
+// Use of this source code is governed by the MIT License
+// that can be found in the LICENSE file.
+
+// This tool generates primitive polynomial
+// and it's log, exponent, multiply and inverse tables etc.
 package main
 
 import (
@@ -9,18 +16,18 @@ import (
 	"strings"
 )
 
-// set deg here
-const deg = 8 // <= 8
+const deg = 8
 
 type polynomial [deg + 1]byte
 
 func main() {
-	f, err := os.OpenFile("tables", os.O_WRONLY|os.O_CREATE, 0666)
+	f, err := os.OpenFile("gf_tables", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer f.Close()
-	outputWriter := bufio.NewWriter(f)
+
+	w := bufio.NewWriter(f)
 	ps := genPrimitivePolynomial()
 	title := strconv.FormatInt(int64(deg), 10) + " degree primitive polynomial：\n"
 	var pss string
@@ -30,10 +37,10 @@ func main() {
 		pss = pss + pf
 	}
 	body := fmt.Sprintf(title+"%v", pss)
-	outputWriter.WriteString(body)
+	w.WriteString(body)
 
-	//set primitive polynomial here to generator tables
-	//x^8+x^4+x^3+x^2+1
+	// Set primitive polynomial here to generator tables.
+	// Default: x^8+x^4+x^3+x^2+1
 	var primitivePolynomial polynomial
 	primitivePolynomial[0] = 1
 	primitivePolynomial[2] = 1
@@ -44,57 +51,52 @@ func main() {
 	lenExpTable := (1 << deg) - 1
 	expTable := genExpTable(primitivePolynomial, lenExpTable)
 	body = fmt.Sprintf("expTbl: %#v\n", expTable)
-	outputWriter.WriteString(body)
+	w.WriteString(body)
 
 	logTable := genLogTable(expTable)
 	body = fmt.Sprintf("logTbl: %#v\n", logTable)
-	outputWriter.WriteString(body)
+	w.WriteString(body)
 
 	mulTable := genMulTable(expTable, logTable)
 	body = fmt.Sprintf("mulTbl: %#v\n", mulTable)
-	outputWriter.WriteString(body)
+	w.WriteString(body)
 
 	lowTable, highTable := genMulTableHalf(mulTable)
 	body = fmt.Sprintf("lowTbl: %#v\n", lowTable)
-	outputWriter.WriteString(body)
+	w.WriteString(body)
 	body = fmt.Sprintf("highTbl: %#v\n", highTable)
-	outputWriter.WriteString(body)
+	w.WriteString(body)
 
-	var combTable [256][32]byte
-	for i := range combTable {
-		l := lowTable[i]
-		for j := 0; j < 16; j++ {
-			combTable[i][j] = l[j]
-		}
-		h := highTable[i][:]
-		for k := 16; k < 32; k++ {
-			combTable[i][k] = h[k-16]
-		}
+	var lowHighTbl [256 * 32]byte
+	for i := 0; i < 256; i++ {
+		copy(lowHighTbl[i*32:i*32+16], lowTable[i])
+		copy(lowHighTbl[i*32+16:i*32+32], highTable[i])
 	}
-	body = fmt.Sprintf("lowhighTbl: %#v\n", combTable)
-	outputWriter.WriteString(body)
+
+	body = fmt.Sprintf("lowHighTbl: %#v\n", lowHighTbl)
+	w.WriteString(body)
 
 	inverseTable := genInverseTable(mulTable)
 	body = fmt.Sprintf("inverseTbl: %#v\n", inverseTable)
-	outputWriter.WriteString(body)
-	outputWriter.Flush()
+	w.WriteString(body)
+	w.Flush()
 }
 
-// generate primitive Polynomial
+// Generate primitive Polynomial.
 func genPrimitivePolynomial() []polynomial {
-	// drop Polynomial x，so the constant term must be 1
-	// so there are 2^(deg-1) Polynomials
+	// Drop Polynomial x，so the constant term must be 1,
+	// so there are 2^(deg-1) Polynomials.
 	cnt := 1 << (deg - 1)
 	var polynomials []polynomial
 	var p polynomial
 	p[0] = 1
 	p[deg] = 1
-	// gen all Polynomials
+	// Generate all Polynomials.
 	for i := 0; i < cnt; i++ {
 		p = genPolynomial(p, 1)
 		polynomials = append(polynomials, p)
 	}
-	// drop Polynomial x+1, so the cnt of Polynomials is odd
+	// Drop Polynomial x+1, so the cnt of Polynomials is odd.
 	var psRaw []polynomial
 	for _, p := range polynomials {
 		var n int
@@ -107,14 +109,14 @@ func genPrimitivePolynomial() []polynomial {
 			psRaw = append(psRaw, p)
 		}
 	}
-	// order of primitive element == 2^deg -1 ?
+	// Order of primitive element == 2^deg -1
 	var ps []polynomial
 	for _, p := range psRaw {
 		lenTable := (1 << deg) - 1
 		table := genExpTable(p, lenTable)
 		var numOf1 int
 		for _, v := range table {
-			// cnt 1 in ExpTable
+			// Cnt 1 in ExpTable.
 			if int(v) == 1 {
 				numOf1++
 			}
@@ -148,7 +150,7 @@ func genExpTable(primitivePolynomial polynomial, exp int) []byte {
 	table[1] = byte(2)
 	for i := 2; i < exp; i++ {
 		rawPolynomial = expGrowPolynomial(rawPolynomial, primitivePolynomial)
-		table[i] = byte(getValueOfPolynomial(rawPolynomial))
+		table[i] = getValueOfPolynomial(rawPolynomial)
 	}
 	return table
 }
@@ -187,8 +189,7 @@ func getValueOfPolynomial(p polynomial) uint8 {
 }
 
 func genLogTable(expTable []byte) []byte {
-	table := make([]byte, (1 << deg))
-	//table[0] 无法由本原元的幂得到
+	table := make([]byte, 1<<deg)
 	table[0] = 0
 	for i, v := range expTable {
 		table[v] = byte(i)
@@ -196,8 +197,8 @@ func genLogTable(expTable []byte) []byte {
 	return table
 }
 
-func genMulTable(expTable, logTable []byte) [256][256]byte {
-	var result [256][256]byte
+func genMulTable(expTable, logTable []byte) (result [256][256]byte) {
+
 	for a := range result {
 		for b := range result[a] {
 			if a == 0 || b == 0 {
@@ -216,23 +217,29 @@ func genMulTable(expTable, logTable []byte) [256][256]byte {
 	return result
 }
 
-func genMulTableHalf(mulTable [256][256]byte) (low [256][16]byte, high [256][16]byte) {
-	for a := range low {
-		for b := range low {
+func genMulTableHalf(mulTable [256][256]byte) (low [][]byte, high [][]byte) {
+	low = make([][]byte, 256)
+	high = make([][]byte, 256)
+	for i := range low {
+		low[i] = make([]byte, 16)
+		high[i] = make([]byte, 16)
+	}
+	for i := range low {
+		for j := range low {
 			//result := 0
 			var result byte
-			if !(a == 0 || b == 0) {
-				//result = int(mulTable[a][b])
-				result = mulTable[a][b]
+			if !(i == 0 || j == 0) {
+				//result = int(mulTable[i][j])
+				result = mulTable[i][j]
 
 			}
-			// b & 00001111, [0,15]
-			if (b & 0xf) == b {
-				low[a][b] = result
+			// j & 00001111, [0,15]
+			if (j & 0xf) == j {
+				low[i][j] = result
 			}
-			// b & 11110000, [240,255]
-			if (b & 0xf0) == b {
-				high[a][b>>4] = result
+			// j & 11110000, [240,255]
+			if (j & 0xf0) == j {
+				high[i][j>>4] = result
 			}
 		}
 	}
@@ -240,15 +247,16 @@ func genMulTableHalf(mulTable [256][256]byte) (low [256][16]byte, high [256][16]
 }
 
 func genInverseTable(mulTable [256][256]byte) [256]byte {
-	var inVerseTable [256]byte
+
+	var inverseTable [256]byte
 	for i, t := range mulTable {
 		for j, v := range t {
 			if int(v) == 1 {
-				inVerseTable[i] = byte(j)
+				inverseTable[i] = byte(j)
 			}
 		}
 	}
-	return inVerseTable
+	return inverseTable
 }
 
 func formatPolynomial(p polynomial) string {
