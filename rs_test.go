@@ -1,45 +1,99 @@
+// Copyright (c) 2017 Temple3x (temple3x@gmail.com)
+//
+// Use of this source code is governed by the MIT License
+// that can be found in the LICENSE file.
+
 package reedsolomon
 
 import (
 	"bytes"
-	crand "crypto/rand"
 	"fmt"
-	"io"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
-
-	"github.com/templexxx/cpu"
 )
 
 const (
 	kb            = 1024
 	mb            = 1024 * 1024
-	testDataCnt   = 10
-	testParityCnt = 4
-	// 256: avx_loop/sse_loop, 32: ymm_register/xmm_register, 16: ymm_register/xmm_register, 8: byte by byte
-	verifySize    = 512 + 256 + 32 + 16 + 8
-	testUpdateRow = 3
+	testDataNum   = 10
+	testParityNum = 4
+	testSize      = kb
 )
 
-var (
-	testDPHas       = []int{10, 8, 5, 6, 7, 4, 2, 12, 13, 1}
-	testNeedReconst = []int{3, 9, 0, 11}
-)
+func TestRS_Encode(t *testing.T) {
+	d, p := testDataNum, testParityNum
+	max := testSize
 
-// when vect_size < 16, encode won't use SIMD
-// Powered by MATLAB
-func TestVerifyEncodeBase(t *testing.T) {
+	testEncode(t, d, p, max, base, -1)
+
+	switch getCPUFeature() {
+	case avx512:
+		testEncode(t, d, p, max, avx2, base)
+		testEncode(t, d, p, max, avx512, avx2)
+	case avx2:
+		testEncode(t, d, p, max, avx2, base)
+	}
+}
+
+func testEncode(t *testing.T, d, p, maxSize, feat, cmpFeat int) {
+
+	rand.Seed(time.Now().UnixNano())
+
+	fs := featToStr(feat)
+	for size := 1; size <= maxSize; size++ {
+		exp := make([][]byte, d+p)
+		act := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
+			exp[j], act[j] = make([]byte, size), make([]byte, size)
+		}
+		for j := 0; j < d; j++ {
+			fillRandom(exp[j])
+			copy(act[j], exp[j])
+		}
+		r, err := New(d, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.cpuFeat = feat
+		err = r.Encode(act)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var f func(vects [][]byte) error
+		if cmpFeat < 0 {
+			f = r.mul
+		} else {
+			r.cpuFeat = cmpFeat
+			f = r.Encode
+		}
+		err = f(exp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := range exp {
+			if !bytes.Equal(exp[j], act[j]) {
+				t.Fatalf("%s mismatched with %s, vect: %d, size: %d",
+					fs, featToStr(cmpFeat), j, size)
+			}
+		}
+	}
+
+	t.Logf("%s pass %d+%d, max_size: %d",
+		fs, d, p, maxSize)
+}
+
+// Powered by MATLAB.
+func TestRS_mul(t *testing.T) {
 	d, p := 5, 5
 	r, err := New(d, p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	vects := [][]byte{{0}, {4}, {2}, {6}, {8}, {0}, {0}, {0}, {0}, {0}}
-	err = r.Encode(vects)
-	if err != nil {
-		t.Fatal(err)
-	}
+	r.mul(vects)
 	if vects[5][0] != 97 {
 		t.Fatal("vect 5 mismatch")
 	}
@@ -57,304 +111,331 @@ func TestVerifyEncodeBase(t *testing.T) {
 	}
 }
 
-func TestVerifyEncodeSIMD(t *testing.T) {
-	d, p := testDataCnt, testParityCnt
-	if hasAVX512() {
-		verifyEncodeSIMD(t, d, p, avx512)
-		verifyEncodeSIMD(t, d, p, avx2)
-	} else if cpu.X86.HasAVX2 {
-		verifyEncodeSIMD(t, d, p, avx2)
-	} else {
-		t.Log("not support SIMD")
-	}
+// Wrap matrix.mul.
+func (r *RS) mul(vects [][]byte) error {
+	r.GenMatrix.mul(vects, r.DataNum, r.ParityNum, len(vects[0]))
+	return nil
 }
 
-// compare encodeBase & encodeSIMD(avx2 or ssse3)
-// step1: copy data from expect to result
-// step2: encodeSIMD & ecodeBase
-// step3: compare
-func verifyEncodeSIMD(t *testing.T, d, p, cpuFeature int) {
-	for size := 1; size <= verifySize; size++ {
-		expect := make([][]byte, d+p)
-		result := make([][]byte, d+p)
-		for j := 0; j < d+p; j++ {
-			expect[j], result[j] = make([]byte, size), make([]byte, size)
-		}
-		for j := 0; j < d; j++ {
-			err := fillRandom(expect[j])
-			if err != nil {
-				t.Fatal(err)
+// m(generator matrix) * vectors,
+// it's the basic matrix multiply.
+func (m matrix) mul(vects [][]byte, d, p, n int) {
+	src := vects[:d]
+	out := vects[d:]
+	for i := 0; i < p; i++ {
+		for j := 0; j < n; j++ {
+			var s uint8
+			for k := 0; k < d; k++ {
+				s ^= gfmul(src[k][j], m[i*d+k])
 			}
-			copy(result[j], expect[j])
-		}
-		r, err := New(d, p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		r.cpu = cpuFeature
-		err = r.Encode(result)
-		if err != nil {
-			t.Fatal(err)
-		}
-		r.cpu = base
-		err = r.Encode(expect)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for j := range expect {
-			if !bytes.Equal(expect[j], result[j]) {
-				var cpuFeatureStr string
-				if cpuFeature == avx2 {
-					cpuFeatureStr = "avx2"
-				} else {
-					cpuFeatureStr = "ssse3"
-				}
-				t.Fatalf("no match encodeSIMD with encodeBase; vect: %d; size: %d; feature: %s", j, size, cpuFeatureStr)
-			}
+			out[i][j] = s
 		}
 	}
 }
 
-func TestVerifyReconst(t *testing.T) {
-	verifyReconst(t, testDataCnt, testParityCnt, testDPHas, testNeedReconst)
+func TestRS_Reconst(t *testing.T) {
+	testReconst(t, testDataNum, testParityNum, testSize, 128)
 }
 
-// step1: encode expect
-// step2: copy dhHas from expect to result
-// step3: reconst result
-// step4: compare
-func verifyReconst(t *testing.T, d, p int, dpHas, needReconst []int) {
-	for size := 1; size <= verifySize; size++ {
-		expect := make([][]byte, d+p)
-		result := make([][]byte, d+p)
-		for j := 0; j < d+p; j++ {
-			expect[j], result[j] = make([]byte, size), make([]byte, size)
-		}
-		for j := 0; j < d; j++ {
-			err := fillRandom(expect[j])
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-		r, err := New(d, p)
-		err = r.Encode(expect)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, h := range dpHas {
-			copy(result[h], expect[h])
-		}
-		err = r.Reconst(result, dpHas, needReconst)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, n := range needReconst {
-			if !bytes.Equal(expect[n], result[n]) {
-				t.Fatalf("no match reconst; vect: %d; size: %d", n, size)
-			}
-		}
-	}
-}
+func testReconst(t *testing.T, d, p, size, loop int) {
 
-// reconst part of lost
-func TestVerifyReconstPart(t *testing.T) {
-	d, p := 5, 3
-	for i := 0; i < 1024; i++ {
-		lost := makeLost(d, p)
-		for j := 0; j <= p; j++ {
-			for _, l := range lost[:j] {
-				testVerifyReconstPart(t, d, p, lost[:j], l)
-			}
-		}
-	}
-}
-
-func testVerifyReconstPart(t *testing.T, d, p int, lost []int, needReconst int) {
-	size := 2
-	expect := make([][]byte, d+p)
-	result := make([][]byte, d+p)
-	for j := 0; j < d+p; j++ {
-		expect[j] = make([]byte, size)
-		result[j] = make([]byte, size)
-	}
-	for j := 0; j < d; j++ {
-		err := fillRandom(expect[j])
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	r, err := New(d, p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = r.Encode(expect)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dpHas := makeDPHas(d, p, lost)
-	for _, h := range dpHas {
-		copy(result[h], expect[h])
-	}
-	err = r.Reconst(result, dpHas, []int{needReconst})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(expect[needReconst], result[needReconst]) {
-		t.Fatal("lost:", lost, "needReconst:", needReconst)
-	}
-
-}
-
-func makeDPHas(dataCnt, parityCnt int, needReconst []int) []int {
-	dpHas := make([]int, dataCnt)
-	for i := range dpHas {
-		for j := 0; j < dataCnt+parityCnt; j++ {
-			if !isIn(j, needReconst) {
-				if !isIn(j, dpHas) {
-					dpHas[i] = j
-				}
-			}
-		}
-	}
-	return dpHas
-}
-
-func makeLost(dataCnt, parityCnt int) []int {
-	needReconst := make([]int, parityCnt)
-	off := 0
 	rand.Seed(time.Now().UnixNano())
-	for {
-		if off == parityCnt-1 {
-			break
-		}
-		n := rand.Intn(dataCnt + parityCnt)
-		if !isIn(n, needReconst) {
-			needReconst[off] = n
-			off++
-		}
-	}
-	return needReconst
-}
 
-func TestVerifyUpdate(t *testing.T) {
-	verifyUpdate(t, testDataCnt, testParityCnt, testUpdateRow)
-}
-
-// compare encode&update results
-func verifyUpdate(t *testing.T, d, p, updateRow int) {
-	for size := 1; size <= verifySize; size++ {
-		updateRet := make([][]byte, d+p)
-		encodeRet := make([][]byte, d+p)
+	for i := 0; i < loop; i++ {
+		exp := make([][]byte, d+p)
+		act := make([][]byte, d+p)
 		for j := 0; j < d+p; j++ {
-			updateRet[j], encodeRet[j] = make([]byte, size), make([]byte, size)
+			exp[j], act[j] = make([]byte, size), make([]byte, size)
 		}
 		for j := 0; j < d; j++ {
-			err := fillRandom(encodeRet[j])
-			if err != nil {
-				t.Fatal(err)
-			}
-			copy(updateRet[j], encodeRet[j])
+			fillRandom(exp[j])
 		}
+
 		r, err := New(d, p)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = r.Encode(updateRet)
-		if err != nil {
-			t.Fatal(err)
-		}
-		newData := make([]byte, size)
-		err = fillRandom(newData)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = r.Update(updateRet[updateRow], newData, updateRow, updateRet[d:d+p])
+		err = r.Encode(exp)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		copy(encodeRet[updateRow], newData)
-		err = r.Encode(encodeRet)
+		lost := makeLostRandom(d+p, rand.Intn(p+1))
+		needReconst := lost[:rand.Intn(len(lost)+1)]
+		dpHas := makeHasFromLost(d+p, lost)
+		for _, h := range dpHas {
+			copy(act[h], exp[h])
+		}
+
+		// Try to reconstruct some health vectors.
+		// Although we want to reconstruct these vectors,
+		// but it maybe a mistake.
+		for _, nr := range needReconst {
+			if rand.Intn(4) == 0 { // 1/4 chance.
+				copy(act[nr], exp[nr])
+			}
+		}
+
+		err = r.Reconst(act, dpHas, needReconst)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, n := range needReconst {
+			if !bytes.Equal(exp[n], act[n]) {
+				t.Fatalf("reconst failed: vect: %d, size: %d", n, size)
+			}
+		}
+	}
+}
+
+func makeHasFromLost(n int, lost []int) []int {
+	s := make([]int, n-len(lost))
+	c := 0
+	for i := 0; i < n; i++ {
+		if !isIn(i, lost) {
+			s[c] = i
+			c++
+		}
+	}
+	return s
+}
+
+func TestRS_Update(t *testing.T) {
+	testUpdate(t, testDataNum, testParityNum, testSize)
+}
+
+func testUpdate(t *testing.T, d, p, size int) {
+
+	rand.Seed(time.Now().UnixNano())
+
+	for i := 0; i < d; i++ {
+		act := make([][]byte, d+p)
+		exp := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
+			act[j], exp[j] = make([]byte, size), make([]byte, size)
+		}
+		for j := 0; j < d; j++ {
+			fillRandom(exp[j])
+			copy(act[j], exp[j])
+		}
+
+		r, err := New(d, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = r.Encode(act)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		newData := make([]byte, size)
+		fillRandom(newData)
+		updateRow := i
+		err = r.Update(act[updateRow], newData, updateRow, act[d:d+p])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		copy(exp[updateRow], newData)
+		err = r.Encode(exp)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for j := d; j < d+p; j++ {
-			if !bytes.Equal(updateRet[j], encodeRet[j]) {
-				t.Fatalf("update mismatch; vect: %d; size: %d", j, size)
+			if !bytes.Equal(act[j], exp[j]) {
+				t.Fatalf("update failed: vect: %d, size: %d", j, size)
 			}
 		}
 	}
 }
 
-func TestEncodeMatrixCache(t *testing.T) {
-	d, p := testDataCnt, testParityCnt
+func TestRS_Replace(t *testing.T) {
+	testReplace(t, testDataNum, testParityNum, testSize, 128, true)
+	testReplace(t, testDataNum, testParityNum, testSize, 128, false)
+}
+
+func testReplace(t *testing.T, d, p, size, loop int, toZero bool) {
+
+	rand.Seed(time.Now().UnixNano())
+
+	for i := 0; i < loop; i++ {
+		replaceRows := makeReplaceRowRandom(d)
+		act := make([][]byte, d+p)
+		exp := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
+			act[j], exp[j] = make([]byte, size), make([]byte, size)
+		}
+		for j := 0; j < d; j++ {
+			fillRandom(exp[j])
+			copy(act[j], exp[j])
+		}
+
+		data := make([][]byte, len(replaceRows))
+		for i, rr := range replaceRows {
+			data[i] = make([]byte, size)
+			copy(data[i], exp[rr])
+		}
+
+		if toZero {
+			for _, rr := range replaceRows {
+				exp[rr] = make([]byte, size)
+			}
+		}
+
+		r, err := New(d, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = r.Encode(exp)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !toZero {
+			for _, rr := range replaceRows {
+				act[rr] = make([]byte, size)
+			}
+		}
+		err = r.Encode(act)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = r.Replace(data, replaceRows, act[d:])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for j := d; j < d+p; j++ {
+			if !bytes.Equal(act[j], exp[j]) {
+				t.Fatalf("replace failed: vect: %d, size: %d", j, size)
+			}
+		}
+
+	}
+}
+
+func makeReplaceRowRandom(d int) []int {
+	rand.Seed(time.Now().UnixNano())
+
+	n := rand.Intn(d + 1)
+	s := make([]int, n)
+	c := 0
+	for i := 0; i < 64; i++ {
+		if c == n {
+			break
+		}
+		v := rand.Intn(d)
+		if !isIn(v, s) {
+			s[c] = v
+			c++
+		}
+	}
+	if c == 0 {
+		s = []int{0}
+	}
+	return s
+}
+
+func TestRS_getReconstMatrixFromCache(t *testing.T) {
+	d, p := 64, 64 // Big enough for cache effects.
 	r, err := New(d, p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.cacheEnabled == false {
-		t.Fatal("cache enable failed")
+	// Enable Cache.
+	r.cacheEnabled = true
+	r.inverseMatrix = new(sync.Map)
+
+	rand.Seed(time.Now().UnixNano())
+	dpHas := makeHasRandom(d+p, p)
+	var dLost []int
+	for _, h := range dpHas {
+		if h < d {
+			dLost = append(dLost, h)
+		}
 	}
-	dLost, _ := SplitNeedReconst(d, testNeedReconst)
-	// store a matrix in cache
-	gm, err := r.getGenMatrixFromCache(testDPHas, dLost)
+	start1 := time.Now()
+	exp, err := r.getReconstMatrix(dpHas, dLost)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// read cache
-	var bitmap uint64 // indicate dpHas
-	for _, i := range testDPHas {
-		bitmap += 1 << uint8(i)
+	cost1 := time.Now().Sub(start1)
+
+	start2 := time.Now()
+	act, err := r.getReconstMatrix(dpHas, dLost)
+	if err != nil {
+		t.Fatal(err)
 	}
-	d, lostCnt := r.DataCnt, len(dLost)
-	v, ok := r.inverseMatrix.Load(bitmap)
-	gmFromCache := make([]byte, lostCnt*d)
-	if ok {
-		im := v.([]byte)
-		for i, l := range dLost {
-			copy(gmFromCache[i*d:i*d+d], im[l*d:l*d+d])
-		}
+	cost2 := time.Now().Sub(start2)
+
+	if cost2 >= cost1 {
+		t.Fatal("cache is much slower than expect")
 	}
-	if !bytes.Equal(gm, gmFromCache) {
-		t.Fatal("matrix misamtch")
+
+	if !bytes.Equal(act, exp) {
+		t.Fatal("cache matrix mismatched")
 	}
 }
 
-func BenchmarkEncode(b *testing.B) {
-	sizes := []int{4 * kb, 4 * mb}
-	b.Run("", benchEncRun(benchEnc, testDataCnt, testParityCnt, sizes))
+func BenchmarkRS_Encode(b *testing.B) {
+	dps := [][]int{
+		[]int{10, 2},
+		[]int{10, 4},
+		[]int{12, 4},
+	}
+
+	sizes := []int{
+		4 * kb,
+		mb,
+		8 * mb,
+	}
+
+	var feats []int
+	switch getCPUFeature() {
+	case avx512:
+		feats = append(feats, avx512)
+		feats = append(feats, avx2)
+	case avx2:
+		feats = append(feats, avx2)
+	}
+	feats = append(feats, base)
+
+	b.Run("", benchmarkEncode(benchEnc, feats, dps, sizes))
 }
 
-func benchEncRun(f func(*testing.B, int, int, int), d, p int, sizes []int) func(*testing.B) {
+func benchmarkEncode(f func(*testing.B, int, int, int, int), feats []int, dps [][]int, sizes []int) func(*testing.B) {
 	return func(b *testing.B) {
-		for _, s := range sizes {
-			b.Run(fmt.Sprintf("(%d+%d)*%dKB", d, p, s/kb), func(b *testing.B) {
-				f(b, d, p, s)
-			})
+		for _, feat := range feats {
+			for _, dp := range dps {
+				d, p := dp[0], dp[1]
+				for _, size := range sizes {
+					b.Run(fmt.Sprintf("(%d+%d)-%s-%s", d, p, byteToStr(size), featToStr(feat)), func(b *testing.B) {
+						f(b, d, p, size, feat)
+					})
+				}
+			}
 		}
 	}
 }
 
-func benchEnc(b *testing.B, d, p, size int) {
+func benchEnc(b *testing.B, d, p, size, feat int) {
+
 	vects := make([][]byte, d+p)
 	for j := 0; j < d+p; j++ {
 		vects[j] = make([]byte, size)
 	}
 	for j := 0; j < d; j++ {
-		err := fillRandom(vects[j])
-		if err != nil {
-			b.Fatal(err)
-		}
+		fillRandom(vects[j])
 	}
 	r, err := New(d, p)
 	if err != nil {
 		b.Fatal(err)
 	}
-	err = r.Encode(vects)
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.SetBytes(int64(d * size))
+	r.cpuFeat = feat
+
+	b.SetBytes(int64((d + p) * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		err = r.Encode(vects)
@@ -364,32 +445,37 @@ func benchEnc(b *testing.B, d, p, size int) {
 	}
 }
 
-func BenchmarkReconst(b *testing.B) {
-	sizes := []int{4 * kb, 64 * kb, 1 * mb}
-	b.Run("", benchmarkReconst(benchReconst, testDataCnt, testParityCnt, sizes, testDPHas, testNeedReconst))
+func BenchmarkRS_Reconst(b *testing.B) {
+	d, p := 10, 4
+	size := 4 * kb
+
+	b.Run("", benchmarkReconst(benchReconst, d, p, size))
 }
 
-func benchmarkReconst(f func(*testing.B, int, int, int, []int, []int),
-	d, p int, sizes, has, needReconst []int) func(*testing.B) {
+func benchmarkReconst(f func(*testing.B, int, int, int, []int, []int), d, p, size int) func(*testing.B) {
+
+	datas := make([]int, d)
+	for i := range datas {
+		datas[i] = i
+	}
 	return func(b *testing.B) {
-		for _, s := range sizes {
-			b.Run(fmt.Sprintf("(%d+%d)*%dKB reconst %d vects", d, p, s/kb, len(needReconst)), func(b *testing.B) {
-				f(b, d, p, s, has, needReconst)
-			})
+		for i := 1; i <= p; i++ {
+			lost := datas[:i]
+			dpHas := makeHasFromLost(d+p, lost)
+			b.Run(fmt.Sprintf("(%d+%d)-%s-reconst_%d_data_vects-%s",
+				d, p, byteToStr(size), i, featToStr(getCPUFeature())),
+				func(b *testing.B) { f(b, d, p, size, dpHas, lost) })
 		}
 	}
 }
 
-func benchReconst(b *testing.B, d, p, size int, has, needReconst []int) {
+func benchReconst(b *testing.B, d, p, size int, dpHas, needReconst []int) {
 	vects := make([][]byte, d+p)
 	for j := 0; j < d+p; j++ {
 		vects[j] = make([]byte, size)
 	}
 	for j := 0; j < d; j++ {
-		err := fillRandom(vects[j])
-		if err != nil {
-			b.Fatal(err)
-		}
+		fillRandom(vects[j])
 	}
 	r, err := New(d, p)
 	if err != nil {
@@ -399,45 +485,41 @@ func benchReconst(b *testing.B, d, p, size int, has, needReconst []int) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	err = r.Reconst(vects, has, needReconst)
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.SetBytes(int64(d * size))
+
+	b.SetBytes(int64((d + len(needReconst)) * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err = r.Reconst(vects, has, needReconst)
+		err = r.Reconst(vects, dpHas, needReconst)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func BenchmarkUpdateParity(b *testing.B) {
-	sizes := []int{4 * kb, 4 * mb}
-	b.Run("", benchmarkUpdateParity(benchUpdateParity, testDataCnt, testParityCnt, sizes, testUpdateRow))
+func BenchmarkRS_Update(b *testing.B) {
+	d, p := 10, 4
+	size := 4 * kb
+
+	b.Run("", benchmarkUpdate(benchUpdate, d, p, size))
 }
 
-func benchmarkUpdateParity(f func(*testing.B, int, int, int, int), d, p int, sizes []int, updateRow int) func(*testing.B) {
+func benchmarkUpdate(f func(*testing.B, int, int, int, int), d, p, size int) func(*testing.B) {
+
 	return func(b *testing.B) {
-		for _, s := range sizes {
-			b.Run(fmt.Sprintf("(%d+%d)*%dKB update", d, p, s/kb), func(b *testing.B) {
-				f(b, d, p, s, updateRow)
-			})
-		}
+		updateRow := rand.Intn(d)
+		b.Run(fmt.Sprintf("(%d+%d)-%s-%s",
+			d, p, byteToStr(size), featToStr(getCPUFeature())),
+			func(b *testing.B) { f(b, d, p, size, updateRow) })
 	}
 }
 
-func benchUpdateParity(b *testing.B, d, p, size, updateRow int) {
+func benchUpdate(b *testing.B, d, p, size, updateRow int) {
 	vects := make([][]byte, d+p)
 	for j := 0; j < d+p; j++ {
 		vects[j] = make([]byte, size)
 	}
 	for j := 0; j < d; j++ {
-		err := fillRandom(vects[j])
-		if err != nil {
-			b.Fatal(err)
-		}
+		fillRandom(vects[j])
 	}
 	r, err := New(d, p)
 	if err != nil {
@@ -447,16 +529,11 @@ func benchUpdateParity(b *testing.B, d, p, size, updateRow int) {
 	if err != nil {
 		b.Fatal(err)
 	}
+
 	newData := make([]byte, size)
-	err = fillRandom(newData)
-	if err != nil {
-		b.Fatal(err)
-	}
-	err = r.Update(vects[updateRow], newData, updateRow, vects[d:])
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.SetBytes(int64(d * size))
+	fillRandom(newData)
+
+	b.SetBytes(int64((p + 2 + p) * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		err = r.Update(vects[updateRow], newData, updateRow, vects[d:])
@@ -466,7 +543,76 @@ func benchUpdateParity(b *testing.B, d, p, size, updateRow int) {
 	}
 }
 
-func fillRandom(v []byte)(err error) {
-	_, err = io.ReadFull(crand.Reader, v)
-	return
+func BenchmarkRS_Replace(b *testing.B) {
+	d, p := 10, 4
+	size := 4 * kb
+
+	b.Run("", benchmarkReplace(benchReplace, d, p, size))
+}
+
+func benchmarkReplace(f func(*testing.B, int, int, int, int), d, p, size int) func(*testing.B) {
+
+	return func(b *testing.B) {
+		for i := 1; i <= d-p; i++ {
+			b.Run(fmt.Sprintf("(%d+%d)-%s-replace_%d_data_vects-%s",
+				d, p, byteToStr(size), i, featToStr(getCPUFeature())),
+				func(b *testing.B) { f(b, d, p, size, i) })
+		}
+	}
+}
+
+func benchReplace(b *testing.B, d, p, size, n int) {
+	vects := make([][]byte, d+p)
+	for j := 0; j < d+p; j++ {
+		vects[j] = make([]byte, size)
+	}
+	for j := 0; j < d; j++ {
+		fillRandom(vects[j])
+	}
+	r, err := New(d, p)
+	if err != nil {
+		b.Fatal(err)
+	}
+	err = r.Encode(vects)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	updateRows := make([]int, n)
+	for i := range updateRows {
+		updateRows[i] = i
+	}
+	b.SetBytes(int64((n + p + p) * size))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = r.Replace(vects[:n], updateRows, vects[d:])
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func featToStr(f int) string {
+	switch f {
+	case avx512:
+		return "AVX512"
+	case avx2:
+		return "AVX2"
+	case base:
+		return "Base"
+	default:
+		return "Tested"
+	}
+}
+
+func fillRandom(p []byte) {
+	rand.Read(p)
+}
+
+func byteToStr(n int) string {
+	if n >= mb {
+		return fmt.Sprintf("%dMB", n/mb)
+	}
+
+	return fmt.Sprintf("%dKB", n/kb)
 }

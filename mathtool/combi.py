@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+"""
+Copyright (c) 2017 Temple3x (temple3x@gmail.com)
+
+Use of this source code is governed by the MIT License
+that can be found in the LICENSE file.
+"""
+
 import math
 
 def facto(n):
@@ -17,6 +24,3 @@ def approx_combi(n, m):
 
     power = - (m-u) ** 2 / 2 / sig / sig
     return 1.0 / (sig * ((2*math.pi)**.5)) * (math.e ** power) * (2**n)
-
-for n, m in ((5, 2), (10, 3), (15, 6)):
-    print combi(n, m), approx_combi(n, m)

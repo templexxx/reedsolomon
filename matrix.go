@@ -1,116 +1,167 @@
+// Copyright (c) 2017 Temple3x (temple3x@gmail.com)
+//
+// Use of this source code is governed by the MIT License
+// that can be found in the LICENSE file.
+
 package reedsolomon
 
-import "errors"
+import (
+	"errors"
+)
 
-// matrix row*cols bytes
+// matrix: row*column bytes,
+// I use one slice but not 2D slice,
+// because type matrix is only as encoding/generator matrix's
+// container, hundreds bytes at most,
+// so it maybe more cache-friendly and GC-friendly.
 type matrix []byte
 
-// genEncMatrix generate encoding matrix. upper: Identity_Matrix; lower: Cauchy_Matrix
-func genEncMatrix(d, p int) matrix {
+// makeSurvivedMatrix makes an encoding matrix.
+// High portion: Identity Matrix;
+// Lower portion: Cauchy Matrix.
+// The Encoding Matrix is as same as Intel ISA-L's gf_gen_cauchy1_matrix:
+// https://github.com/intel/isa-l/blob/master/erasure_code/ec_base.c
+//
+// Warn:
+// It maybe not the common way to make an encoding matrix,
+// so it may corrupt when mix this lib with other erasure codes libs.
+//
+// The common way to make a encoding matrix is using a
+// Vandermonde Matrix, then use elementary transformation
+// to make an identity matrix in the high portion of the matrix.
+// But it's a little complicated.
+//
+// And there is a wrong way to use Vandermonde Matrix
+// (see Intel ISA-L, and this lib's document warn the issue),
+// in the wrong way, they use an identity matrix in the high portion,
+// and a Vandermonde matrix in the lower directly,
+// and this encoding matrix's submatrix maybe singular.
+// You can find a proof in invertible.jpeg.
+func makeEncodeMatrix(d, p int) matrix {
 	r := d + p
 	m := make([]byte, r*d)
-	// create identity matrix upper
+	// Create identity matrix upper.
 	for i := 0; i < d; i++ {
-		m[i*d+i] = byte(1)
+		m[i*d+i] = 1
 	}
-	// create cauchy matrix below
-	off := d * d // offset of encMatrix
+
+	// Create cauchy matrix below. (1/(i + j), 0 <= j < d, d <= i < 2*d)
+	off := d * d // Skip the identity matrix.
 	for i := d; i < r; i++ {
 		for j := 0; j < d; j++ {
-			d := i ^ j
-			a := inverseTbl[d]
-			m[off] = byte(a)
+			m[off] = inverseTbl[i^j]
 			off++
 		}
 	}
 	return m
 }
 
-// [A|B] -> [B]
-func (m matrix) subMatrix(n int) (b matrix) {
-	b = matrix(make([]byte, n*n))
-	for i := 0; i < n; i++ {
-		off := i * n
-		copy(b[off:off+n], m[2*off+n:2*(off+n)])
+// makeReconstMatrix is according to
+// m(encoding matrix for reconstruction,
+// see "func (m matrix) makeEncMatrixForReconst(dpHas []int) (em matrix, err error)")
+// & dpHas & dLost(data lost)
+// to make a new matrix for reconstructing.
+// Warn:
+// len(dpHas) must = dataNum,
+// you may need to cut the dpHas before use this method.
+func (m matrix) makeReconstMatrix(dpHas, dLost []int) (rm matrix, err error) {
+
+	d, lostN := len(dpHas), len(dLost)
+	rm = make([]byte, lostN*d)
+	for i, l := range dLost {
+		copy(rm[i*d:i*d+d], m[l*d:l*d+d])
 	}
 	return
 }
 
-var ErrNoSquare = errors.New("not a square matrix")
-
-func (m matrix) invert(n int) (im matrix, err error) { // im: inverse_matrix of m
-	if n != len(m)/n {
-		err = ErrNoSquare
+// makeEncMatrixForReconst makes an encoding matrix by calculating
+// the inverse matrix of survived encoding matrix.
+func (m matrix) makeEncMatrixForReconst(dpHas []int) (em matrix, err error) {
+	d := len(dpHas)
+	hm := make([]byte, d*d)
+	for i, l := range dpHas {
+		copy(hm[i*d:i*d+d], m[l*d:l*d+d])
+	}
+	em, err = matrix(hm).invert(len(dpHas))
+	if err != nil {
 		return
 	}
-	// step1: (m) -> (m|I)
-	mI := matrix(make([]byte, 2*n*n))
-	off := 0
-	for i := 0; i < n; i++ {
-		copy(mI[2*off:2*off+n], m[off:off+n])
-		mI[2*off+n+i] = byte(1)
-		off += n
-	}
-	// step2: Gaussian Elimination
-	err = mI.gauss(n)
-	im = mI.subMatrix(n)
 	return
 }
 
-// swap row[i] & row[j], col = n
+var ErrNotSquare = errors.New("not a square matrix")
+var ErrSingularMatrix = errors.New("matrix is singular")
+
+// invert calculates m's inverse matrix,
+// and return it or any error.
+func (m matrix) invert(n int) (inv matrix, err error) {
+	if n*n != len(m) {
+		err = ErrNotSquare
+		return
+	}
+
+	mm := make([]byte, 2*n*n)
+	left := mm[:n*n]
+	copy(left, m) // Copy m, avoiding side affect.
+
+	// Make an identity matrix.
+	inv = mm[n*n:]
+	for i := 0; i < n; i++ {
+		inv[i*n+i] = 1
+	}
+
+	for i := 0; i < n; i++ {
+		// Pivoting.
+		if left[i*n+i] == 0 {
+			// Find a row with non-zero in current column and swap.
+			// If there is no one, means it's a singular matrix.
+			var j int
+			for j = i + 1; j < n; j++ {
+				if left[j*n+i] != 0 {
+					break
+				}
+			}
+			if j == n {
+				return nil, ErrSingularMatrix
+			}
+
+			matrix(left).swap(i, j, n)
+			inv.swap(i, j, n)
+		}
+
+		if left[i*n+i] != 1 {
+			v := inverseTbl[left[i*n+i]] // 1/pivot
+			// Scale row.
+			for j := 0; j < n; j++ {
+				left[i*n+j] = gfmul(left[i*n+j], v)
+				inv[i*n+j] = gfmul(inv[i*n+j], v)
+			}
+		}
+
+		// Use elementary transformation to
+		// make all elements(except pivot) in the left matrix
+		// become 0.
+		for j := 0; j < n; j++ {
+			if j == i {
+				continue
+			}
+
+			v := left[j*n+i]
+			if v != 0 {
+				for k := 0; k < n; k++ {
+					left[j*n+k] ^= gfmul(v, left[i*n+k])
+					inv[j*n+k] ^= gfmul(v, inv[i*n+k])
+				}
+			}
+		}
+	}
+
+	return
+}
+
+// swap square matrix row[i] & row[j], col = n
 func (m matrix) swap(i, j, n int) {
 	for k := 0; k < n; k++ {
 		m[i*n+k], m[j*n+k] = m[j*n+k], m[i*n+k]
 	}
-}
-
-var ErrSingularMatrix = errors.New("matrix is singular")
-
-// (A|I) -> (I|A')
-func (m matrix) gauss(n int) error {
-	c := 2 * n // c: cols_num of m
-	// main_diagonal(left_part) -> 1 & left_part -> upper_triangular
-	for i := 0; i < n; i++ {
-		// m[i*c+i]: element of main_diagonal(left_part)
-		if m[i*c+i] == 0 { // swap until get a non-zero element
-			for j := i + 1; j < n; j++ {
-				if m[j*c+i] != 0 {
-					m.swap(i, j, c)
-					break
-				}
-			}
-		}
-		if m[i*c+i] == 0 { // all element in one col are zero
-			return ErrSingularMatrix
-		}
-		// main_diagonal(left_part) -> 1
-		if m[i*c+i] != 1 {
-			e := m[i*c+i]
-			s := inverseTbl[e] // s * e = 1
-			for j := 0; j < c; j++ {
-				m[i*c+j] = mulTbl[m[i*c+j]][s] // all element * s (in i row)
-			}
-		}
-		// left_part -> upper_triangular
-		for j := i + 1; j < n; j++ {
-			if m[j*c+i] != 0 {
-				s := m[j*c+i] // s ^ (s * m[i*c+i]) = 0, m[i*c+i] = 1
-				for k := 0; k < c; k++ {
-					m[j*c+k] ^= mulTbl[s][m[i*c+k]] // all element ^ (s * row_i[k]) (in j row)
-				}
-			}
-		}
-	}
-	// element upper main_diagonal(left_part) -> 0
-	for i := 0; i < n; i++ {
-		for j := 0; j < i; j++ {
-			if m[j*c+i] != 0 {
-				s := m[j*c+i] // s ^ (s * m[i*c+i]) = 0, m[i*c+i] = 1
-				for k := 0; k < c; k++ {
-					m[j*c+k] ^= mulTbl[s][m[i*c+k]] // all element ^ (s * row_i[k]) (in j row)
-				}
-			}
-		}
-	}
-	return nil
 }
