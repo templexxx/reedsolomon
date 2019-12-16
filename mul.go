@@ -1,3 +1,8 @@
+// Copyright (c) 2017 Temple3x (temple3x@gmail.com)
+//
+// Use of this source code is governed by the MIT License
+// that can be found in the LICENSE file.
+
 package reedsolomon
 
 // Coefficient multiply by vector(d) in basic way (byte by byte search multiply table).
