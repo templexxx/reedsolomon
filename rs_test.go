@@ -320,7 +320,7 @@ func makeReplaceRowRandom(d int) []int {
 	rand.Seed(time.Now().UnixNano())
 
 	n := rand.Intn(d + 1)
-	s := make([]int, n)
+	s := make([]int, 0)
 	c := 0
 	for i := 0; i < 64; i++ {
 		if c == n {
@@ -328,7 +328,7 @@ func makeReplaceRowRandom(d int) []int {
 		}
 		v := rand.Intn(d)
 		if !isIn(v, s) {
-			s[c] = v
+			s = append(s, v)
 			c++
 		}
 	}
