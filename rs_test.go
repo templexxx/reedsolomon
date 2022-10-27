@@ -93,7 +93,7 @@ func TestRS_mul(t *testing.T) {
 		t.Fatal(err)
 	}
 	vects := [][]byte{{0}, {4}, {2}, {6}, {8}, {0}, {0}, {0}, {0}, {0}}
-	r.mul(vects)
+	_ = r.mul(vects)
 	if vects[5][0] != 97 {
 		t.Fatal("vect 5 mismatch")
 	}
@@ -141,7 +141,13 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 
 	rand.Seed(time.Now().UnixNano())
 
+	r, err := New(d, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for i := 0; i < loop; i++ {
+
 		exp := make([][]byte, d+p)
 		act := make([][]byte, d+p)
 		for j := 0; j < d+p; j++ {
@@ -151,10 +157,6 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 			fillRandom(exp[j])
 		}
 
-		r, err := New(d, p)
-		if err != nil {
-			t.Fatal(err)
-		}
 		err = r.Encode(exp)
 		if err != nil {
 			t.Fatal(err)
@@ -381,9 +383,9 @@ func TestRS_getReconstMatrixFromCache(t *testing.T) {
 
 func BenchmarkRS_Encode(b *testing.B) {
 	dps := [][]int{
-		[]int{10, 2},
-		[]int{10, 4},
-		[]int{12, 4},
+		{10, 2},
+		{10, 4},
+		{12, 4},
 	}
 
 	sizes := []int{

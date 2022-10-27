@@ -34,6 +34,9 @@ type RS struct {
 
 	cacheEnabled  bool      // Cache inverse matrix or not.
 	inverseMatrix *sync.Map // Inverse matrix's cache.
+
+	mulVect    func(c byte, d, p []byte)
+	mulVectXOR func(c byte, d, p []byte)
 }
 
 // EnableAVX512 may slow down CPU Clock (maybe not).
@@ -41,6 +44,7 @@ type RS struct {
 // https://lemire.me/blog/2018/04/19/by-how-much-does-avx-512-slow-down-your-cpu-a-first-experiment/
 //
 // You can modify it before new RS.
+// Warn: not thread-safe
 var EnableAVX512 = true
 
 var ErrIllegalVects = errors.New("illegal data/parity number: <= 0 or data+parity > 256")
@@ -60,19 +64,45 @@ func New(dataNum, parityNum int) (r *RS, err error) {
 
 	// At most 35960 inverse matrices (when data=28, parity=4).
 	// There is no need to keep too many matrices in cache,
-	// too many parity num will slow down the encode performance,
-	// so the cache won't effect much.
+	// too much parity will slow down the encoding performance hugely,
+	// so the cache won't affect much.
 	// Warn:
 	// You can modify it,
 	// but be careful that it may cause memory explode
 	// (you can use mathtool/combi.go to calculate how many inverse matrices you will have),
-	// and data+parity must < 64 (tips: see the codes about cache inverse matrix).
+	// and data+parity must < 64 if you want to modify them anyway (tips: see the codes about cache inverse matrix).
 	if r.DataNum < 29 && r.ParityNum < 5 {
 		r.cacheEnabled = true
 		r.inverseMatrix = new(sync.Map)
 	}
 
 	r.cpuFeat = getCPUFeature()
+
+	switch r.cpuFeat {
+	case avx512:
+		r.mulVect = func(c byte, d, p []byte) {
+			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
+			mulVectAVX512(tbl, d, p)
+		}
+		r.mulVectXOR = func(c byte, d, p []byte) {
+			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
+			mulVectXORAVX512(tbl, d, p)
+		}
+	case avx2:
+		r.mulVect = func(c byte, d, p []byte) {
+			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
+			mulVectAVX2(tbl, d, p)
+		}
+		r.mulVectXOR = func(c byte, d, p []byte) {
+			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
+			mulVectXORAVX2(tbl, d, p)
+		}
+	default:
+		r.mulVect = mulVectBase
+		r.mulVectXOR = mulVectXORBase
+
+	}
+
 	return
 }
 
@@ -99,6 +129,13 @@ func hasAVX512() (ok bool) {
 		cpu.X86.HasAVX512BW &&
 		cpu.X86.HasAVX512F &&
 		cpu.X86.HasAVX512DQ
+}
+
+// DisableAVX512 disables avx512 feature.
+// warn:
+// not thread-safe
+func DisableAVX512() {
+	EnableAVX512 = false
 }
 
 // Encode encodes data for generating parity.
@@ -136,7 +173,7 @@ func (r *RS) checkEncode(vects [][]byte) (err error) {
 	return
 }
 
-// encode encodes data piece by piece.
+// encode data piece by piece.
 // Split vectors for cache-friendly (see func getSplitSize(n int) int for details).
 //
 // updateOnly: means update old results by XOR new results, but not write new results directly.
@@ -179,15 +216,15 @@ func getSplitSize(n int) int {
 func (r *RS) encodePart(start, end int, dv, pv [][]byte, updateOnly bool) {
 	undone := end - start
 	do := (undone >> 4) << 4 // do could be 0(when undone < 16)
-	d, p, g, f := r.DataNum, r.ParityNum, r.GenMatrix, r.cpuFeat
+	d, p, g := r.DataNum, r.ParityNum, r.GenMatrix
 	if do >= 16 {
 		end2 := start + do
 		for i := 0; i < d; i++ {
 			for j := 0; j < p; j++ {
 				if i != 0 || updateOnly {
-					mulVectXOR(g[j*d+i], dv[i][start:end2], pv[j][start:end2], f)
+					r.mulVectXOR(g[j*d+i], dv[i][start:end2], pv[j][start:end2])
 				} else {
-					mulVect(g[j*d+i], dv[0][start:end2], pv[j][start:end2], f)
+					r.mulVect(g[j*d+i], dv[0][start:end2], pv[j][start:end2])
 				}
 			}
 		}
@@ -323,7 +360,7 @@ func (r *RS) reconstData(vects [][]byte, dpHas, dNeedReconst []int) (err error) 
 	if err != nil {
 		return
 	}
-	rTmp := &RS{DataNum: d, ParityNum: lostCnt, GenMatrix: rm, cpuFeat: r.cpuFeat}
+	rTmp := &RS{DataNum: d, ParityNum: lostCnt, GenMatrix: rm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
 	return rTmp.Encode(vTmp)
 }
 
@@ -376,7 +413,7 @@ func (r *RS) reconstParity(vects [][]byte, pLost []int) (err error) {
 		vTmp[i+d] = vects[p]
 	}
 
-	rTmp := &RS{DataNum: d, ParityNum: lostN, GenMatrix: g, cpuFeat: r.cpuFeat}
+	rTmp := &RS{DataNum: d, ParityNum: lostN, GenMatrix: g, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
 	return rTmp.Encode(vTmp)
 }
 
@@ -404,7 +441,7 @@ func (r *RS) Update(oldData []byte, newData []byte, row int, parity [][]byte) (e
 		gm[i] = c
 		vects[i+1] = parity[i]
 	}
-	rs := &RS{DataNum: 1, ParityNum: r.ParityNum, GenMatrix: gm, cpuFeat: r.cpuFeat}
+	rs := &RS{DataNum: 1, ParityNum: r.ParityNum, GenMatrix: gm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
 	rs.encode(vects, true)
 	return nil
 }
@@ -488,7 +525,7 @@ func (r *RS) Replace(data [][]byte, replaceRows []int, parity [][]byte) (err err
 	}
 
 	updateRS := &RS{DataNum: rn, ParityNum: p,
-		GenMatrix: gm, cpuFeat: r.cpuFeat}
+		GenMatrix: gm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
 	updateRS.encode(vects, true)
 	return nil
 }
