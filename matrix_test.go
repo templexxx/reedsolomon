@@ -202,8 +202,8 @@ func testEncMatrixInvertible(t *testing.T, d, p int) {
 	t.Logf("%d+%d pass invertible test, total submatrix(with lost): %d", d, p, cnt)
 }
 
-// Check Encoding Matrices' submatrices are invertible.
-// Randomly pick up submatrix every data+parity pair.
+// Check Encoding Matrices' sub-matrices are invertible.
+// Randomly pick up sub-matrix every data+parity pair.
 //
 // This test may cost about 100s, unless modify codes about
 // galois field or matrix, there is no need to run it every time,
