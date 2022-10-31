@@ -7,6 +7,7 @@ package reedsolomon
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"math/bits"
 	"math/rand"
@@ -202,6 +203,9 @@ func testEncMatrixInvertible(t *testing.T, d, p int) {
 	t.Logf("%d+%d pass invertible test, total submatrix(with lost): %d", d, p, cnt)
 }
 
+var Invertible = flag.Bool("invert-test", false,
+	"checking encoding matrices' sub-matrices are invertible or not by pick up sub-matrix randomly")
+
 // Check Encoding Matrices' sub-matrices are invertible.
 // Randomly pick up sub-matrix every data+parity pair.
 //
@@ -210,7 +214,7 @@ func testEncMatrixInvertible(t *testing.T, d, p int) {
 // so skip the test by default, avoiding waste time in develop process.
 func TestEncMatrixInvertibleRandom(t *testing.T) {
 
-	if testing.Short() {
+	if !*Invertible {
 		t.Skip("skip the test, because it may cost too much time")
 	}
 
