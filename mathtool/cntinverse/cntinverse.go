@@ -10,8 +10,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/templexxx/reedsolomon"
 	"os"
+
+	"github.com/templexxx/reedsolomon"
 )
 
 var vects = flag.Uint64("vects", 20, "number of vectors (data+parity)")

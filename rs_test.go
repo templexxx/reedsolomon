@@ -126,7 +126,7 @@ func (m matrix) mul(vects [][]byte, d, p, n int) {
 		for j := 0; j < n; j++ {
 			var s uint8
 			for k := 0; k < d; k++ {
-				s ^= gfmul(src[k][j], m[i*d+k])
+				s ^= gfMul(src[k][j], m[i*d+k])
 			}
 			out[i][j] = s
 		}

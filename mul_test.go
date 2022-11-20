@@ -48,7 +48,7 @@ func testMulVect(t *testing.T, maxSize, feat, cmpFeat int) {
 			exp := make([]byte, size)
 			if cmpFeat < 0 {
 				for i, v := range d {
-					exp[i] = gfmul(uint8(c), v)
+					exp[i] = gfMul(uint8(c), v)
 				}
 			} else {
 				mulVect(byte(c), d, exp, base)
@@ -103,7 +103,7 @@ func testMulVectXOR(t *testing.T, maxSize, feat, cmpFeat int) {
 
 			if cmpFeat < 0 {
 				for i, v := range d {
-					exp[i] ^= gfmul(uint8(c), v)
+					exp[i] ^= gfMul(uint8(c), v)
 				}
 			} else {
 				mulVectXOR(byte(c), d, exp, cmpFeat)

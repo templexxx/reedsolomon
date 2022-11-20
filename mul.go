@@ -25,6 +25,6 @@ func mulVectXORBase(c byte, d, p []byte) {
 	}
 }
 
-func gfmul(a, b uint8) uint8 {
+func gfMul(a, b uint8) uint8 {
 	return mulTbl[a][b]
 }

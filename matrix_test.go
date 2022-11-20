@@ -168,7 +168,7 @@ func testEncMatrixInvertible(t *testing.T, d, p int) {
 	cnt := 0
 	// Lost more, bitmap bigger.
 	var min uint64 = (1 << (d + 1)) - 1 ^ (1 << (d - 1)) // Min value when lost one data row vector.
-	var max uint64 = ((1 << d) - 1) << p                 // Max value when lost when lost parity-num data row vectors.
+	var max uint64 = ((1 << d) - 1) << p                 // Max value when lost parity-num data row vectors.
 	for bitmap = min; bitmap <= max; bitmap++ {
 		if bits.OnesCount64(bitmap) != d {
 			continue
@@ -253,7 +253,7 @@ func mul(a, b matrix, n int) (out matrix) {
 		for j := 0; j < n; j++ {
 			d := byte(0)
 			for k := 0; k < n; k++ {
-				d ^= gfmul(a[n*i+k], b[n*k+j])
+				d ^= gfMul(a[n*i+k], b[n*k+j])
 
 			}
 			out[i*n+j] = d

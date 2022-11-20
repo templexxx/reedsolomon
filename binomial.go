@@ -7,8 +7,8 @@ package reedsolomon
 import "math"
 
 const (
-	errNegInput = "combin: negative input"
-	badSetSize  = "combin: n < k"
+	errNegInput = "combination: negative input"
+	badSetSize  = "combination: n < k"
 )
 
 // GeneralizedBinomial returns the generalized binomial coefficient of (n, k),

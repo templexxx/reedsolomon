@@ -490,7 +490,7 @@ func (r *RS) checkUpdate(oldData []byte, newData []byte, row int, parity [][]byt
 // we need replaces these useless vectors with zero vectors for free space.
 //
 // Warn:
-// data's index & replaceRows must has the same sort.
+// data's index & replaceRows must have the same sort.
 func (r *RS) Replace(data [][]byte, replaceRows []int, parity [][]byte) (err error) {
 
 	err = r.checkReplace(data, replaceRows, parity)

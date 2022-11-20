@@ -11,7 +11,7 @@ func TestMulTbl(t *testing.T) {
 	for i := 0; i <= 255; i++ {
 		for j := 0; j <= 255; j++ {
 			act := mulTbl[i][j]
-			exp := intelISALmulTbl[i*256+j]
+			exp := intelMulTbl[i*256+j]
 			if act != exp {
 				t.Fatalf("%d * %d should be %d, but got: %d", i, j, exp, act)
 			}
@@ -52,7 +52,8 @@ func TestLowHighTbl(t *testing.T) {
 	}
 }
 
-var intelISALmulTbl = []byte{
+// copied from: https://github.com/intel/isa-l/blob/master/erasure_code/ec_base.h
+var intelMulTbl = []byte{
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

@@ -26,7 +26,7 @@ type matrix []byte
 // It maybe not the common way to make an encoding matrix,
 // so it may corrupt when mix this lib with other erasure codes libs.
 //
-// The common way to make a encoding matrix is using a
+// The common way to make an encoding matrix is using a
 // Vandermonde Matrix, then use elementary transformation
 // to make an identity matrix in the high portion of the matrix.
 // But it's a little complicated.
@@ -35,7 +35,7 @@ type matrix []byte
 // (see Intel ISA-L, and this lib's document warn the issue),
 // in the wrong way, they use an identity matrix in the high portion,
 // and a Vandermonde matrix in the lower directly,
-// and this encoding matrix's submatrix maybe singular.
+// and this encoding matrix's sub-matrix maybe singular.
 // You can find a proof in invertible.jpeg.
 func makeEncodeMatrix(d, p int) matrix {
 	r := d + p
@@ -102,7 +102,7 @@ func (m matrix) invert(n int) (inv matrix, err error) {
 
 	mm := make([]byte, 2*n*n)
 	left := mm[:n*n]
-	copy(left, m) // Copy m, avoiding side affect.
+	copy(left, m) // Copy m, avoiding side effect.
 
 	// Make an identity matrix.
 	inv = mm[n*n:]
@@ -133,8 +133,8 @@ func (m matrix) invert(n int) (inv matrix, err error) {
 			v := inverseTbl[left[i*n+i]] // 1/pivot
 			// Scale row.
 			for j := 0; j < n; j++ {
-				left[i*n+j] = gfmul(left[i*n+j], v)
-				inv[i*n+j] = gfmul(inv[i*n+j], v)
+				left[i*n+j] = gfMul(left[i*n+j], v)
+				inv[i*n+j] = gfMul(inv[i*n+j], v)
 			}
 		}
 
@@ -149,8 +149,8 @@ func (m matrix) invert(n int) (inv matrix, err error) {
 			v := left[j*n+i]
 			if v != 0 {
 				for k := 0; k < n; k++ {
-					left[j*n+k] ^= gfmul(v, left[i*n+k])
-					inv[j*n+k] ^= gfmul(v, inv[i*n+k])
+					left[j*n+k] ^= gfMul(v, left[i*n+k])
+					inv[j*n+k] ^= gfMul(v, inv[i*n+k])
 				}
 			}
 		}

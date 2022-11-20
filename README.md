@@ -43,9 +43,9 @@ which can save about 30% I/O in reconstruction process).
 >- Primitive Polynomial: x^8 + x^4 + x^3 + x^2 + 1 (0x1d).
 >
 >- [Cauchy Matrix](matrix.go) is the generator matrix.
->   >-  Any submatrix of encoding matrix is invertible (See the proof [here](invertible.jpg)). 
+>   >-  Any sub-matrix of encoding matrix is invertible (See the proof [here](invertible.jpg)). 
 >
->- [Galois Field Tool](mathtool/gentbls/gentbls.go): Generate primitive polynomial 
+>- [Galois Field Tool](mathtool/gentbls/gentbls.go): Generate primitive polynomial,
 and it's log, exponent, multiply and inverse tables etc. 
 >
 >- [Inverse Matrices Tool](mathtool/cntinverse/cntinverse.go): Calculate the number of inverse matrices 
