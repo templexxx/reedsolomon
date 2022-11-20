@@ -35,7 +35,7 @@ jobs:
             ${{ runner.os }}-go-
       - name: test
         run: |
-          go run test -v -race
+          go test -v -race
       - name: Send coverage
         uses: shogo82148/actions-goveralls@v1
         with:
