@@ -36,9 +36,3 @@ jobs:
       - name: test
         run: |
           go test -v -race
-      - name: Send coverage
-        uses: shogo82148/actions-goveralls@v1
-        with:
-          path-to-profile: coverage.out
-          flag-name: Go-${{ matrix.go }}
-          parallel: true
