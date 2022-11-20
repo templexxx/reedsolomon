@@ -45,10 +45,10 @@ which can save about 30% I/O in reconstruction process).
 >- [Cauchy Matrix](matrix.go) is the generator matrix.
 >   >-  Any submatrix of encoding matrix is invertible (See the proof [here](invertible.jpg)). 
 >
->- [Galois Field Tool](mathtool/gentbls.go): Generate primitive polynomial 
+>- [Galois Field Tool](mathtool/gentbls/gentbls.go): Generate primitive polynomial 
 and it's log, exponent, multiply and inverse tables etc. 
 >
->- [Inverse Matrices Tool](mathtool/combi.go): Calculate the number of inverse matrices 
+>- [Inverse Matrices Tool](mathtool/cntinverse/cntinverse.go): Calculate the number of inverse matrices 
 with specific data & parity number.
 >
 

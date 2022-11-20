@@ -3,7 +3,7 @@
 // Use of this source code is governed by the MIT License
 // that can be found in the LICENSE file.
 
-// This tool generates primitive polynomial
+// This tool generates primitive polynomial,
 // and it's log, exponent, multiply and inverse tables etc.
 package main
 

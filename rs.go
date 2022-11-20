@@ -69,7 +69,7 @@ func New(dataNum, parityNum int) (r *RS, err error) {
 	// Warn:
 	// You can modify it,
 	// but be careful that it may cause memory explode
-	// (you can use mathtool/combi.go to calculate how many inverse matrices you will have),
+	// (you can use mathtool/cntinverse to calculate how many inverse matrices you will have),
 	// and data+parity must < 64 if you want to modify them anyway (tips: see the codes about cache inverse matrix).
 	if r.DataNum < 29 && r.ParityNum < 5 {
 		r.cacheEnabled = true
