@@ -366,15 +366,6 @@ func (r *RS) checkReconst(survived, needReconst []int) (vs, nr []int, dn int, er
 	return
 }
 
-func isIn(e int, s []int) bool {
-	for _, v := range s {
-		if e == v {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *RS) reconstData(vects [][]byte, survived, needReconst []int) (err error) {
 
 	nn := len(needReconst)
@@ -385,19 +376,18 @@ func (r *RS) reconstData(vects [][]byte, survived, needReconst []int) (err error
 	d := r.DataNum
 	survived = survived[:d] // Only need dataNum vectors for reconstruction.
 
-	rm, err := r.getReconstMatrix(survived, needReconst)
+	gm, err := r.getReconstMatrix(survived, needReconst)
 	if err != nil {
 		return
 	}
-	rTmp := &RS{DataNum: d, ParityNum: nn, GenMatrix: rm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
-	vTmp := make([][]byte, d+nn)
+	vs := make([][]byte, d+nn)
 	for i, row := range survived {
-		vTmp[i] = vects[row]
+		vs[i] = vects[row]
 	}
 	for i, row := range needReconst {
-		vTmp[i+d] = vects[row]
+		vs[i+d] = vects[row]
 	}
-	return rTmp.Encode(vTmp)
+	return r.reconst(vs, gm, nn)
 }
 
 func (r *RS) reconstParity(vects [][]byte, needReconst []int) (err error) {
@@ -408,20 +398,27 @@ func (r *RS) reconstParity(vects [][]byte, needReconst []int) (err error) {
 	}
 
 	d := r.DataNum
-	g := make([]byte, nn*d)
+	gm := make([]byte, nn*d)
 	for i, l := range needReconst {
-		copy(g[i*d:i*d+d], r.encMatrix[l*d:l*d+d])
+		copy(gm[i*d:i*d+d], r.encMatrix[l*d:l*d+d])
 	}
 
-	rTmp := &RS{DataNum: d, ParityNum: nn, GenMatrix: g, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
-	vTmp := make([][]byte, d+nn)
+	vs := make([][]byte, d+nn)
 	for i := 0; i < d; i++ {
-		vTmp[i] = vects[i]
+		vs[i] = vects[i]
 	}
 	for i, p := range needReconst {
-		vTmp[i+d] = vects[p]
+		vs[i+d] = vects[p]
 	}
-	return rTmp.Encode(vTmp)
+
+	return r.reconst(vs, gm, nn)
+}
+
+func (r *RS) reconst(vects [][]byte, gm matrix, pn int) error {
+
+	rTmp := &RS{DataNum: r.DataNum, ParityNum: pn, GenMatrix: gm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
+	return rTmp.Encode(vects)
+
 }
 
 func (r *RS) getReconstMatrix(dpHas, dLost []int) (rm []byte, err error) {
