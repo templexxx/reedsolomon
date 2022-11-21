@@ -300,47 +300,37 @@ func makeLostRandom(n, lostN int) []int {
 	return l
 }
 
-func BenchmarkMatrixInvert(b *testing.B) {
-	ns := []int{5, 10, 15}
-	b.Run("", benchMatrixInvertRun(benchInvert, ns))
+func BenchmarkMakeEncMatrixForReconst(b *testing.B) {
+	dps := [][2]int{ // data, parity
+		{4, 4},
+		{10, 4},
+		{16, 16},
+		{64, 64},
+		{128, 128},
+		{255, 1},
+		{256, 0},
+	}
+	b.Run("", benchMatrixInvertRun(benchMakeEncMatrixForReconst, dps))
 }
 
-func benchMatrixInvertRun(f func(*testing.B, int), ns []int) func(*testing.B) {
+func benchMatrixInvertRun(f func(*testing.B, int, int), dps [][2]int) func(*testing.B) {
 	return func(b *testing.B) {
-		for _, n := range ns {
-			b.Run(fmt.Sprintf("(%dx%d)", n, n), func(b *testing.B) {
-				f(b, n)
+		for _, dp := range dps {
+			b.Run(fmt.Sprintf("(%d+%d)", dp[0], dp[1]), func(b *testing.B) {
+				f(b, dp[0], dp[1])
 			})
 		}
 	}
 }
 
-func benchInvert(b *testing.B, n int) {
-	m := makeCauchyMatrix(n)
+func benchMakeEncMatrixForReconst(b *testing.B, d, p int) {
+	m := makeEncodeMatrix(d, p)
+	has := makeHasRandom(d+p, p)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := m.invert(n)
+		_, err := m.makeEncMatrixForReconst(has)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
-}
-
-// Cauchy Matrix must be invertible,
-// and it's complex enough for test invert performance.
-//
-// In Reed-Solomon Codes reconstruction process,
-// because the major part of the matrix is from
-// the identity matrix, the speed will be faster than
-// this benchmark test.
-func makeCauchyMatrix(n int) matrix {
-	m := make([]byte, n*n)
-	off := 0
-	for i := n; i < n*2; i++ {
-		for j := 0; j < n; j++ {
-			m[off] = inverseTbl[i^j]
-			off++
-		}
-	}
-	return m
 }
