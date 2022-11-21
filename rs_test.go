@@ -134,7 +134,7 @@ func (m matrix) mul(vects [][]byte, d, p, n int) {
 }
 
 func TestRS_Reconst(t *testing.T) {
-	testReconst(t, testDataNum, testParityNum, testSize, 128)
+	testReconst(t, testDataNum, testParityNum, 1024, 128)
 }
 
 func testReconst(t *testing.T, d, p, size, loop int) {
@@ -169,11 +169,12 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 			copy(act[h], exp[h])
 		}
 
+		// TODO weird fix it.
 		// Try to reconstruct some health vectors.
 		// Although we want to reconstruct these vectors,
 		// but it maybe a mistake.
 		for _, nr := range needReconst {
-			if rand.Intn(4) == 0 { // 1/4 chance.
+			if rand.Intn(4) == 1 { // 1/4 chance.
 				copy(act[nr], exp[nr])
 			}
 		}
@@ -185,7 +186,7 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 
 		for _, n := range needReconst {
 			if !bytes.Equal(exp[n], act[n]) {
-				t.Fatalf("reconst failed: vect: %d, size: %d", n, size)
+				t.Fatalf("mismatched vect: %d, size: %d", n, size)
 			}
 		}
 	}
@@ -494,6 +495,33 @@ func benchReconst(b *testing.B, d, p, size int, dpHas, needReconst []int) {
 		err = r.Reconst(vects, dpHas, needReconst)
 		if err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRS_checkReconst(b *testing.B) {
+	dps := [][2]int{
+		{10, 4},
+	}
+	for _, dp := range dps {
+		d := dp[0]
+		p := dp[1]
+		r, err := New(d, p)
+		if err != nil {
+			b.Fatal(err)
+		}
+		for i := 1; i <= p; i++ {
+			is, ir := genIdxForReconst(d, p, d, i)
+			b.Run(fmt.Sprintf("d:%d,p:%d,survived:%d,need_reconst:%d", d, p, len(is), len(ir)),
+				func(b *testing.B) {
+					b.ResetTimer()
+					for j := 0; j < b.N; j++ {
+						_, _, _, err = r.checkReconst(is, ir)
+						if err != nil {
+							b.Fatal(err)
+						}
+					}
+				})
 		}
 	}
 }

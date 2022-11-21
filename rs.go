@@ -247,8 +247,12 @@ func (r *RS) encodePart(start, end int, dv, pv [][]byte, updateOnly bool) {
 // vects: All vectors, len(vects) = dataNum + parityNum.
 // survived: Survived data & parity indexes, len(survived) must >= dataNum.
 // needReconst: Vectors indexes which need to be reconstructed.
+// needReconst has higher priority than survived:
+// e.g., survived: [1,2,3] needReconst [0,1] -> survived: [2,3] needReconst [0,1]
+// When len(survived) == 0, assuming all vectors survived, will be refreshed by needReconst later:
+// survived vectors must have correct data.
 //
-// e.g:
+// e.g.,:
 // in 3+2, the whole indexes: [0,1,2,3,4],
 // if vects[0,4] are lost & they need to be reconstructed
 // (Maybe you only need to reconstruct vects[0] when lost vects[0,4], so the needReconst should be [0], but not [0,4]).
@@ -256,8 +260,8 @@ func (r *RS) encodePart(start, end int, dv, pv [][]byte, updateOnly bool) {
 // results will be written into vects[needReconst] directly.
 func (r *RS) Reconst(vects [][]byte, survived, needReconst []int) (err error) {
 
-	var dataNeedReconst, parityNeedReconst []int
-	survived, dataNeedReconst, parityNeedReconst, err = r.checkReconst(survived, needReconst) // survived & needReconst has been sorted & dedup.
+	var dataNeedReconstN int
+	survived, needReconst, dataNeedReconstN, err = r.checkReconst(survived, needReconst)
 	if err != nil {
 		if err == ErrNoNeedReconst {
 			return nil
@@ -268,89 +272,94 @@ func (r *RS) Reconst(vects [][]byte, survived, needReconst []int) (err error) {
 	// steps:
 	// 1. Reconstruct data vectors in needReconst or Reconstruct all data vectors if parity vectors are in needReconst
 	// 2. Reconstruct parity vectors in needReconst
-	if len(dataNeedReconst) != 0 {
-		err = r.reconstData(vects, survived, dataNeedReconst)
-		if err != nil {
-			return
-		}
+	err = r.reconstData(vects, survived, needReconst[:dataNeedReconstN])
+	if err != nil {
+		return
 	}
-	if len(parityNeedReconst) != 0 {
-		err = r.reconstParity(vects, parityNeedReconst)
-		if err != nil {
-			return
-		}
-	}
-	return
+	return r.reconstParity(vects, needReconst[dataNeedReconstN:])
 }
 
 var (
-	ErrNoNeedReconst   = errors.New("no need reconst")
-	ErrTooManyLost     = errors.New("too many lost")
-	ErrReconstConflict = errors.New("survived & needReconst are conflicting")
+	ErrNoNeedReconst = errors.New("no need reconst")
+	ErrTooManyLost   = errors.New("too many lost")
 )
 
-func (r *RS) checkReconst(survived, needReconst []int) (dedupSurvived, dataNeedReconst, parityNeedReconst []int, err error) {
-	dedupSurvived = dedup(survived)
-	dedupNeedReconst := dedup(needReconst)
+const (
+	vectUnknown     = uint8(0)
+	vectSurvived    = uint8(1)
+	vectNeedReconst = uint8(2)
+)
 
-	if len(dedupNeedReconst) == 0 {
+func checkVectIdx(idx []int, d, p int) error {
+	n := d + p
+	for _, i := range idx {
+		if i < 0 || i >= n {
+			return ErrIllegalVects
+		}
+	}
+	return nil
+}
+
+func (r *RS) checkReconst(survived, needReconst []int) (dedupSurvived, dedupReconst []int, needReconstDataN int, err error) {
+	if len(needReconst) == 0 {
 		err = ErrNoNeedReconst
 		return
 	}
 
 	d, p := r.DataNum, r.ParityNum
 
-	if len(dedupNeedReconst) > p || len(dedupSurvived) < d {
-		err = ErrTooManyLost
+	if err = checkVectIdx(survived, d, p); err != nil {
+		return
+	}
+	if err = checkVectIdx(needReconst, d, p); err != nil {
 		return
 	}
 
-	dataSurvived := make([]bool, r.DataNum)
-	s := make([]int, len(dedupSurvived)+len(dedupNeedReconst))
+	status := make([]uint8, d+p)
 
-	for i, v := range dedupSurvived {
-		if v < 0 || v >= d+p {
-			err = ErrIllegalVectIndex
-			return
+	if len(survived) == 0 {
+		for i := range status {
+			status[i] = vectSurvived
 		}
-		if v < r.DataNum {
-			dataSurvived[v] = true
-		}
-		s[i] = v
 	}
 
-	// At least one parity needed to be reconst, full data required for reconstructing parity.
-	reconstFullData := dedupNeedReconst[len(dedupNeedReconst)-1] >= r.DataNum
-	dataNeedReconst = make([]int, 0, r.ParityNum*2)
-	if reconstFullData {
-		for i, v := range dataSurvived {
-			if !v {
-				dataNeedReconst = append(dataNeedReconst, i)
+	for _, v := range survived {
+		status[v] = vectSurvived
+	}
+
+	fullDataRequired := false
+	for _, v := range needReconst {
+		status[v] = vectNeedReconst // Origin survived status will be replaced if they're conflicting.
+		if !fullDataRequired && v >= d {
+			fullDataRequired = true // Need to reconstruct parity, full data vectors required.
+		}
+	}
+	if fullDataRequired {
+		for i, v := range status[:d] {
+			if v == vectUnknown {
+				status[i] = vectNeedReconst
 			}
 		}
 	}
 
-	parityNeedReconst = make([]int, 0, r.ParityNum)
-	for i, v := range dedupNeedReconst {
-		if v < 0 || v >= d+p {
-			err = ErrIllegalVectIndex
-			return
+	dedupSurvived = make([]int, 0, d+p)
+	dedupReconst = make([]int, 0, p)
+	for i, s := range status {
+		switch s {
+		case vectSurvived:
+			dedupSurvived = append(dedupSurvived, i)
+		case vectNeedReconst:
+			if i < d {
+				needReconstDataN++
+			}
+			dedupReconst = append(dedupReconst, i)
 		}
-		if v < r.DataNum {
-			dataNeedReconst = append(dataNeedReconst, v)
-		} else {
-			parityNeedReconst = append(parityNeedReconst, v)
-		}
-		s[i+len(dedupSurvived)] = v
 	}
-	dataNeedReconst = dedup(dataNeedReconst)
 
-	ds := dedup(s)
-	if len(ds) != len(s) {
-		err = ErrReconstConflict
+	if len(dedupSurvived) < d || len(dedupReconst) > p {
+		err = ErrTooManyLost
 		return
 	}
-
 	return
 }
 
@@ -364,6 +373,10 @@ func isIn(e int, s []int) bool {
 }
 
 func (r *RS) reconstData(vects [][]byte, dpHas, dNeedReconst []int) (err error) {
+
+	if len(dNeedReconst) == 0 {
+		return nil
+	}
 
 	d := r.DataNum
 	sort.Ints(dpHas)
@@ -419,8 +432,12 @@ func (r *RS) getReconstMatrixFromCache(dpHas, dLost []int) (rm matrix, err error
 }
 
 func (r *RS) reconstParity(vects [][]byte, pLost []int) (err error) {
+
 	d := r.DataNum
 	lostN := len(pLost)
+	if lostN == 0 {
+		return nil
+	}
 
 	g := make([]byte, lostN*d)
 	for i, l := range pLost {
