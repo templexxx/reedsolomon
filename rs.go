@@ -48,11 +48,13 @@ var EnableAVX512 = true
 
 var ErrIllegalVects = errors.New("illegal data/parity number: <= 0 or data+parity > 256")
 
+const maxVects = 256
+
 // New create an RS with specific data & parity numbers.
 func New(dataNum, parityNum int) (r *RS, err error) {
 
 	d, p := dataNum, parityNum
-	if d <= 0 || p <= 0 || d+p > 256 {
+	if d <= 0 || p <= 0 || d+p > maxVects {
 		return nil, ErrIllegalVects
 	}
 
@@ -296,7 +298,11 @@ func checkVectIdx(idx []int, d, p int) error {
 	return nil
 }
 
-func (r *RS) checkReconst(survived, needReconst []int) (dedupSurvived, dedupReconst []int, needReconstDataN int, err error) {
+// check arguments, return:
+// 1. survived indexes
+// 2. data & parity indexes which needed to be reconstructed
+// 3. cnt of data vectors needed to be reconstructed.
+func (r *RS) checkReconst(survived, needReconst []int) (vs, nr []int, dn int, err error) {
 	if len(needReconst) == 0 {
 		err = ErrNoNeedReconst
 		return
@@ -338,21 +344,22 @@ func (r *RS) checkReconst(survived, needReconst []int) (dedupSurvived, dedupReco
 		}
 	}
 
-	dedupSurvived = make([]int, 0, d+p)
-	dedupReconst = make([]int, 0, p)
+	ints := make([]int, d+2*p)
+	vs = ints[:d+p][:0]
+	nr = ints[d+p:][:0]
 	for i, s := range status {
 		switch s {
 		case vectSurvived:
-			dedupSurvived = append(dedupSurvived, i)
+			vs = append(vs, i)
 		case vectNeedReconst:
 			if i < d {
-				needReconstDataN++
+				dn++
 			}
-			dedupReconst = append(dedupReconst, i)
+			nr = append(nr, i)
 		}
 	}
 
-	if len(dedupSurvived) < d || len(dedupReconst) > p {
+	if len(vs) < d || len(nr) > p {
 		err = ErrTooManyLost
 		return
 	}
@@ -393,6 +400,30 @@ func (r *RS) reconstData(vects [][]byte, survived, needReconst []int) (err error
 	return rTmp.Encode(vTmp)
 }
 
+func (r *RS) reconstParity(vects [][]byte, needReconst []int) (err error) {
+
+	nn := len(needReconst)
+	if nn == 0 {
+		return nil
+	}
+
+	d := r.DataNum
+	g := make([]byte, nn*d)
+	for i, l := range needReconst {
+		copy(g[i*d:i*d+d], r.encMatrix[l*d:l*d+d])
+	}
+
+	rTmp := &RS{DataNum: d, ParityNum: nn, GenMatrix: g, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
+	vTmp := make([][]byte, d+nn)
+	for i := 0; i < d; i++ {
+		vTmp[i] = vects[i]
+	}
+	for i, p := range needReconst {
+		vTmp[i+d] = vects[p]
+	}
+	return rTmp.Encode(vTmp)
+}
+
 func (r *RS) getReconstMatrix(dpHas, dLost []int) (rm []byte, err error) {
 
 	if !r.cacheEnabled {
@@ -423,30 +454,6 @@ func (r *RS) getReconstMatrixFromCache(dpHas, dLost []int) (rm matrix, err error
 	}
 	r.inverseMatrix.Store(bitmap, em)
 	return em.makeReconstMatrix(dpHas, dLost)
-}
-
-func (r *RS) reconstParity(vects [][]byte, needReconst []int) (err error) {
-
-	nn := len(needReconst)
-	if nn == 0 {
-		return nil
-	}
-
-	d := r.DataNum
-	g := make([]byte, nn*d)
-	for i, l := range needReconst {
-		copy(g[i*d:i*d+d], r.encMatrix[l*d:l*d+d])
-	}
-
-	rTmp := &RS{DataNum: d, ParityNum: nn, GenMatrix: g, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
-	vTmp := make([][]byte, d+nn)
-	for i := 0; i < d; i++ {
-		vTmp[i] = vects[i]
-	}
-	for i, p := range needReconst {
-		vTmp[i+d] = vects[p]
-	}
-	return rTmp.Encode(vTmp)
 }
 
 // Update updates parity_data when one data_vect changes.
