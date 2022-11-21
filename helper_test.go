@@ -134,3 +134,12 @@ func genIdxNeedReconst(d, p, needReconstN int) []int {
 	}
 	return s
 }
+
+func isIn(e int, s []int) bool {
+	for _, v := range s {
+		if e == v {
+			return true
+		}
+	}
+	return false
+}
