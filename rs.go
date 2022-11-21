@@ -450,7 +450,7 @@ func (r *RS) getReconstMatrixFromCache(survived, needReconst []int) (rm matrix, 
 	if err != nil {
 		return
 	}
-	if atomic.AddUint64(&r.inverseCacheN, 1) < r.inverseCacheMax {
+	if atomic.AddUint64(&r.inverseCacheN, 1) <= r.inverseCacheMax {
 		r.inverseCache.Store(key, em)
 	}
 	return em.makeReconstMatrix(survived, needReconst)
