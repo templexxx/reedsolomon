@@ -13,7 +13,6 @@ package reedsolomon
 
 import (
 	"errors"
-	"sort"
 	"sync"
 
 	"github.com/templexxx/cpu"
@@ -269,9 +268,6 @@ func (r *RS) Reconst(vects [][]byte, survived, needReconst []int) (err error) {
 		return
 	}
 
-	// steps:
-	// 1. Reconstruct data vectors in needReconst or Reconstruct all data vectors if parity vectors are in needReconst
-	// 2. Reconstruct parity vectors in needReconst
 	err = r.reconstData(vects, survived, needReconst[:dataNeedReconstN])
 	if err != nil {
 		return
@@ -372,30 +368,28 @@ func isIn(e int, s []int) bool {
 	return false
 }
 
-func (r *RS) reconstData(vects [][]byte, dpHas, dNeedReconst []int) (err error) {
+func (r *RS) reconstData(vects [][]byte, survived, needReconst []int) (err error) {
 
-	if len(dNeedReconst) == 0 {
+	nn := len(needReconst)
+	if nn == 0 {
 		return nil
 	}
 
 	d := r.DataNum
-	sort.Ints(dpHas)
-	dpHas = dpHas[:d] // Only need dataNum vectors for reconstruction.
-	lostCnt := len(dNeedReconst)
-	vTmp := make([][]byte, d+lostCnt)
+	survived = survived[:d] // Only need dataNum vectors for reconstruction.
 
-	for i, row := range dpHas {
-		vTmp[i] = vects[row]
-	}
-	for i, row := range dNeedReconst {
-		vTmp[i+d] = vects[row]
-	}
-
-	rm, err := r.getReconstMatrix(dpHas, dNeedReconst)
+	rm, err := r.getReconstMatrix(survived, needReconst)
 	if err != nil {
 		return
 	}
-	rTmp := &RS{DataNum: d, ParityNum: lostCnt, GenMatrix: rm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
+	rTmp := &RS{DataNum: d, ParityNum: nn, GenMatrix: rm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
+	vTmp := make([][]byte, d+nn)
+	for i, row := range survived {
+		vTmp[i] = vects[row]
+	}
+	for i, row := range needReconst {
+		vTmp[i+d] = vects[row]
+	}
 	return rTmp.Encode(vTmp)
 }
 
@@ -431,28 +425,27 @@ func (r *RS) getReconstMatrixFromCache(dpHas, dLost []int) (rm matrix, err error
 	return em.makeReconstMatrix(dpHas, dLost)
 }
 
-func (r *RS) reconstParity(vects [][]byte, pLost []int) (err error) {
+func (r *RS) reconstParity(vects [][]byte, needReconst []int) (err error) {
 
-	d := r.DataNum
-	lostN := len(pLost)
-	if lostN == 0 {
+	nn := len(needReconst)
+	if nn == 0 {
 		return nil
 	}
 
-	g := make([]byte, lostN*d)
-	for i, l := range pLost {
+	d := r.DataNum
+	g := make([]byte, nn*d)
+	for i, l := range needReconst {
 		copy(g[i*d:i*d+d], r.encMatrix[l*d:l*d+d])
 	}
 
-	vTmp := make([][]byte, d+lostN)
+	rTmp := &RS{DataNum: d, ParityNum: nn, GenMatrix: g, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
+	vTmp := make([][]byte, d+nn)
 	for i := 0; i < d; i++ {
 		vTmp[i] = vects[i]
 	}
-	for i, p := range pLost {
+	for i, p := range needReconst {
 		vTmp[i+d] = vects[p]
 	}
-
-	rTmp := &RS{DataNum: d, ParityNum: lostN, GenMatrix: g, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
 	return rTmp.Encode(vTmp)
 }
 
