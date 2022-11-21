@@ -14,6 +14,7 @@ package reedsolomon
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	"github.com/templexxx/cpu"
 	xor "github.com/templexxx/xorsimd"
@@ -31,8 +32,13 @@ type RS struct {
 	encMatrix matrix // Encoding matrix.
 	GenMatrix matrix // Generator matrix.
 
-	cacheEnabled  bool      // Cache inverse matrix or not.
-	inverseMatrix *sync.Map // Inverse matrix's cache.
+	inverseCacheEnabled bool
+	inverseCache        *sync.Map // Inverse matrix's cache.
+	// Limitation of cache, total inverse matrix = C(DataNum+ParityNum, DataNum)
+	// = (DataNum+ParityNum)! / ParityNum!DataNum!
+	// If there is no limitation, memory will explode. See mathtool/cntinverse for details.
+	inverseCacheMax uint64
+	inverseCacheN   uint64 // cached inverse matrix.
 
 	mulVect    func(c byte, d, p []byte)
 	mulVectXOR func(c byte, d, p []byte)
@@ -48,7 +54,12 @@ var EnableAVX512 = true
 
 var ErrIllegalVects = errors.New("illegal data/parity number: <= 0 or data+parity > 256")
 
-const maxVects = 256
+const (
+	maxVects                   = 256
+	kib                        = 1024
+	mib                        = 1024 * kib
+	maxInverseMatrixCapInCache = 16 * mib // Keeping inverse matrix cache small, 16MiB is enough for most cases.
+)
 
 // New create an RS with specific data & parity numbers.
 func New(dataNum, parityNum int) (r *RS, err error) {
@@ -63,18 +74,10 @@ func New(dataNum, parityNum int) (r *RS, err error) {
 	r = &RS{DataNum: d, ParityNum: p,
 		encMatrix: e, GenMatrix: g}
 
-	// At most 35960 inverse matrices (when data=28, parity=4).
-	// There is no need to keep too many matrices in cache,
-	// too much parity will slow down the encoding performance hugely,
-	// so the cache won't affect much.
-	// Warn:
-	// You can modify it,
-	// but be careful that it may cause memory explode
-	// (you can use mathtool/cntinverse to calculate how many inverse matrices you will have),
-	// and data+parity must < 64 if you want to modify them anyway (tips: see the codes about cache inverse matrix).
-	if r.DataNum < 29 && r.ParityNum < 5 {
-		r.cacheEnabled = true
-		r.inverseMatrix = new(sync.Map)
+	if r.DataNum+r.ParityNum <= 64 { // I'm using 64bit bitmap as inverse matrix cache's key.
+		r.inverseCacheEnabled = true
+		r.inverseCache = new(sync.Map)
+		r.inverseCacheMax = maxInverseMatrixCapInCache / uint64(r.DataNum) / uint64(r.DataNum)
 	}
 
 	r.cpuFeat = getCPUFeature()
@@ -421,36 +424,44 @@ func (r *RS) reconst(vects [][]byte, gm matrix, pn int) error {
 
 }
 
-func (r *RS) getReconstMatrix(dpHas, dLost []int) (rm []byte, err error) {
+func (r *RS) getReconstMatrix(survived, needReconst []int) (rm []byte, err error) {
 
-	if !r.cacheEnabled {
-		em, err2 := r.encMatrix.makeEncMatrixForReconst(dpHas)
+	if !r.inverseCacheEnabled {
+		em, err2 := r.encMatrix.makeEncMatrixForReconst(survived)
 		if err2 != nil {
 			return nil, err2
 		}
-		return em.makeReconstMatrix(dpHas, dLost)
+		return em.makeReconstMatrix(survived, needReconst)
 	}
-	return r.getReconstMatrixFromCache(dpHas, dLost)
+	return r.getReconstMatrixFromCache(survived, needReconst)
 }
 
-func (r *RS) getReconstMatrixFromCache(dpHas, dLost []int) (rm matrix, err error) {
-	var bitmap uint64 // indicate dpHas
-	for _, i := range dpHas {
-		bitmap += 1 << uint8(i)
-	}
+func (r *RS) getReconstMatrixFromCache(survived, needReconst []int) (rm matrix, err error) {
 
-	emRaw, ok := r.inverseMatrix.Load(bitmap)
+	key := makeInverseCacheKey(survived)
+
+	emRaw, ok := r.inverseCache.Load(key)
 	if ok {
 		em := emRaw.(matrix)
-		return em.makeReconstMatrix(dpHas, dLost)
+		return em.makeReconstMatrix(survived, needReconst)
 	}
 
-	em, err := r.encMatrix.makeEncMatrixForReconst(dpHas)
+	em, err := r.encMatrix.makeEncMatrixForReconst(survived)
 	if err != nil {
 		return
 	}
-	r.inverseMatrix.Store(bitmap, em)
-	return em.makeReconstMatrix(dpHas, dLost)
+	if atomic.AddUint64(&r.inverseCacheN, 1) < r.inverseCacheMax {
+		r.inverseCache.Store(key, em)
+	}
+	return em.makeReconstMatrix(survived, needReconst)
+}
+
+func makeInverseCacheKey(survived []int) uint64 {
+	var key uint64
+	for _, i := range survived {
+		key += 1 << uint8(i) // elements in survived are unique and sorted, okay to use add.
+	}
+	return key
 }
 
 // Update updates parity_data when one data_vect changes.

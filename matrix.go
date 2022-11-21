@@ -56,19 +56,11 @@ func makeEncodeMatrix(d, p int) matrix {
 	return m
 }
 
-// makeReconstMatrix is according to
-// m(encoding matrix for reconstruction,
-// see "func (m matrix) makeEncMatrixForReconst(dpHas []int) (em matrix, err error)")
-// & dpHas & dLost(data lost)
-// to make a new matrix for reconstructing.
-// Warn:
-// len(dpHas) must = dataNum,
-// you may need to cut the dpHas before use this method.
-func (m matrix) makeReconstMatrix(dpHas, dLost []int) (rm matrix, err error) {
+func (m matrix) makeReconstMatrix(survived, needReconst []int) (rm matrix, err error) {
 
-	d, lostN := len(dpHas), len(dLost)
-	rm = make([]byte, lostN*d)
-	for i, l := range dLost {
+	d, nn := len(survived), len(needReconst)
+	rm = make([]byte, nn*d)
+	for i, l := range needReconst {
 		copy(rm[i*d:i*d+d], m[l*d:l*d+d])
 	}
 	return
@@ -76,13 +68,13 @@ func (m matrix) makeReconstMatrix(dpHas, dLost []int) (rm matrix, err error) {
 
 // makeEncMatrixForReconst makes an encoding matrix by calculating
 // the inverse matrix of survived encoding matrix.
-func (m matrix) makeEncMatrixForReconst(dpHas []int) (em matrix, err error) {
-	d := len(dpHas)
-	hm := make([]byte, d*d)
-	for i, l := range dpHas {
-		copy(hm[i*d:i*d+d], m[l*d:l*d+d])
+func (m matrix) makeEncMatrixForReconst(survived []int) (em matrix, err error) {
+	d := len(survived)
+	m2 := make([]byte, d*d)
+	for i, l := range survived {
+		copy(m2[i*d:i*d+d], m[l*d:l*d+d])
 	}
-	em, err = matrix(hm).invert(len(dpHas))
+	em, err = matrix(m2).invert(len(survived))
 	if err != nil {
 		return
 	}

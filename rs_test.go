@@ -8,6 +8,7 @@ package reedsolomon
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/rand"
 	"sync"
 	"testing"
@@ -129,6 +130,32 @@ func (m matrix) mul(vects [][]byte, d, p, n int) {
 				s ^= gfMul(src[k][j], m[i*d+k])
 			}
 			out[i][j] = s
+		}
+	}
+}
+
+func TestMakeInverseCacheKey(t *testing.T) {
+
+	type tc struct {
+		survived []int
+		exp      uint64
+	}
+	cases := []tc{
+		{[]int{0}, 1},
+		{[]int{1}, 2},
+		{[]int{0, 1}, 3},
+		{[]int{0, 1, 2}, 7},
+		{[]int{0, 2}, 5},
+	}
+	survived := make([]int, 64)
+	for i := range survived {
+		survived[i] = i
+	}
+	cases = append(cases, tc{survived, math.MaxUint64})
+	for i, c := range cases {
+		got := makeInverseCacheKey(c.survived)
+		if got != c.exp {
+			t.Fatalf("case: %d, exp: %d, got: %d, survived: %#v", i, c.exp, got, c.survived)
 		}
 	}
 }
@@ -342,14 +369,15 @@ func makeReplaceRowRandom(d int) []int {
 }
 
 func TestRS_getReconstMatrixFromCache(t *testing.T) {
-	d, p := 64, 64 // Big enough for cache effects.
+	d, p := 64, 64 // Big enough for showing cache effects.
 	r, err := New(d, p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Enable Cache.
-	r.cacheEnabled = true
-	r.inverseMatrix = new(sync.Map)
+	r.inverseCacheEnabled = true
+	r.inverseCache = new(sync.Map)
+	r.inverseCacheMax = 1
 
 	rand.Seed(time.Now().UnixNano())
 	dpHas := makeHasRandom(d+p, p)
