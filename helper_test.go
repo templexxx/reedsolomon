@@ -37,8 +37,26 @@ func TestDedup(t *testing.T) {
 	}
 }
 
-// generates survived & needReconst indexes.
-func genIdxForReconst(d, p, survivedN, needReconstN int) ([]int, []int) {
+// dedup removes duplicates from a given slice
+func dedup(s []int) []int {
+
+	sort.Ints(s)
+
+	cnt := len(s)
+	cntDup := 0
+	for i := 1; i < cnt; i++ {
+		if s[i] == s[i-1] {
+			cntDup++
+		} else {
+			s[i-cntDup] = s[i]
+		}
+	}
+
+	return s[:cnt-cntDup]
+}
+
+// generates survived & needReconst sorted indexes.
+func genIdxRand(d, p, survivedN, needReconstN int) ([]int, []int) {
 	if survivedN < d {
 		survivedN = d
 	}
@@ -49,7 +67,7 @@ func genIdxForReconst(d, p, survivedN, needReconstN int) ([]int, []int) {
 		survivedN = d
 	}
 
-	idxR := genIdxNeedReconst(d, p, needReconstN)
+	idxR := genNeedReconstRand(d, p, needReconstN)
 
 	idxS := make([]int, 0, survivedN)
 
@@ -84,7 +102,7 @@ func TestGenIdxForReconst(t *testing.T) {
 
 	for i := 0; i < d+p; i++ {
 		for j := 0; j < d+p; j++ {
-			is, ir := genIdxForReconst(d, p, 10, 4)
+			is, ir := genIdxRand(d, p, 10, 4)
 			checkGenIdx(t, d, p, is, ir, ret)
 			ret = ret[:0]
 		}
@@ -117,7 +135,7 @@ func checkGenIdx(t *testing.T, d, p int, is, ir, all []int) {
 	}
 }
 
-func genIdxNeedReconst(d, p, needReconstN int) []int {
+func genNeedReconstRand(d, p, needReconstN int) []int {
 	rand.Seed(time.Now().UnixNano())
 
 	s := make([]int, needReconstN)
@@ -142,22 +160,4 @@ func isIn(e int, s []int) bool {
 		}
 	}
 	return false
-}
-
-// dedup removes duplicates from a given slice
-func dedup(s []int) []int {
-
-	sort.Ints(s)
-
-	cnt := len(s)
-	cntDup := 0
-	for i := 1; i < cnt; i++ {
-		if s[i] == s[i-1] {
-			cntDup++
-		} else {
-			s[i-cntDup] = s[i]
-		}
-	}
-
-	return s[:cnt-cntDup]
 }

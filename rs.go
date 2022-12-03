@@ -155,9 +155,9 @@ func (r *RS) Encode(vects [][]byte) (err error) {
 }
 
 var (
-	ErrMismatchVects    = errors.New("too few/many vects given")
-	ErrZeroVectSize     = errors.New("vect size is 0")
-	ErrMismatchVectSize = errors.New("vects size mismatched")
+	ErrMismatchVects    = errors.New("too few/many vectors given")
+	ErrZeroVectSize     = errors.New("vector size is 0")
+	ErrMismatchVectSize = errors.New("vectors size mismatched")
 )
 
 func (r *RS) checkEncode(vects [][]byte) (err error) {

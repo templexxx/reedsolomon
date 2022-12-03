@@ -139,13 +139,13 @@ func TestMatrixInvert(t *testing.T) {
 func TestMakeEncMatrixForReconst(t *testing.T) {
 	d, p := 4, 4
 	em := makeEncodeMatrix(d, p)
-	dpHas := makeHasRandom(d+p, p)
-	emr, err := em.makeEncMatrixForReconst(dpHas)
+	survivied, _ := genIdxRand(d, p, d, p)
+	emr, err := em.makeEncMatrixForReconst(survivied)
 	if err != nil {
 		t.Fatal(err)
 	}
 	hasM := make([]byte, d*d)
-	for i, h := range dpHas {
+	for i, h := range survivied {
 		copy(hasM[i*d:i*d+d], em[h*d:h*d+d])
 	}
 	if !mul(emr, hasM, d).isIdentity(d) {
@@ -225,21 +225,21 @@ func TestEncMatrixInvertibleRandom(t *testing.T) {
 			}
 
 			encMatrix := makeEncodeMatrix(d, p)
-			h := makeHasRandom(d+p, p)
+			survived, _ := genIdxRand(d, p, d, p)
 			m := make([]byte, d*d)
 			for i := 0; i < d; i++ {
-				copy(m[i*d:i*d+d], encMatrix[h[i]*d:h[i]*d+d])
+				copy(m[i*d:i*d+d], encMatrix[survived[i]*d:survived[i]*d+d])
 			}
 
 			im, err := matrix(m).invert(d)
 			if err != nil {
-				t.Fatalf("encode matrix is singular, d:%d, p:%d, dpHas:%#v", d, p, h)
+				t.Fatalf("encode matrix is singular, d:%d, p:%d, dpHas:%#v", d, p, survived)
 			}
 
 			// Check A * A' = I or not,
 			// ensure nothing wrong in the invert process.
 			if !mul(im, m, d).isIdentity(d) {
-				t.Fatalf("matrix invert wrong, d:%d, p:%d, dpHas:%#v", d, p, h)
+				t.Fatalf("matrix invert wrong, d:%d, p:%d, dpHas:%#v", d, p, survived)
 			}
 		}
 	}
@@ -268,19 +268,6 @@ func (m matrix) isIdentity(n int) bool {
 		im[i*n+i] = 1
 	}
 	return bytes.Equal(m, im)
-}
-
-func makeHasRandom(n, lostN int) []int {
-	l := makeLostRandom(n, lostN)
-	s := make([]int, n-lostN)
-	c := 0
-	for i := 0; i < n; i++ {
-		if !isIn(i, l) {
-			s[c] = i
-			c++
-		}
-	}
-	return s
 }
 
 func makeLostRandom(n, lostN int) []int {
@@ -325,10 +312,10 @@ func benchMatrixInvertRun(f func(*testing.B, int, int), dps [][2]int) func(*test
 
 func benchMakeEncMatrixForReconst(b *testing.B, d, p int) {
 	m := makeEncodeMatrix(d, p)
-	has := makeHasRandom(d+p, p)
+	survived, _ := genIdxRand(d, p, d, p)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := m.makeEncMatrixForReconst(has)
+		_, err := m.makeEncMatrixForReconst(survived)
 		if err != nil {
 			b.Fatal(err)
 		}

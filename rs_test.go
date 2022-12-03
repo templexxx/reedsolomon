@@ -380,22 +380,30 @@ func TestRS_getReconstMatrixFromCache(t *testing.T) {
 	r.inverseCacheMax = 1
 
 	rand.Seed(time.Now().UnixNano())
-	dpHas := makeHasRandom(d+p, p)
-	var dLost []int
-	for _, h := range dpHas {
-		if h < d {
-			dLost = append(dLost, h)
+
+	var survived, needReconst []int // genReconstMatrix needs survived vectors & data vectors need to be reconstructed.
+	for {
+		var needReconstData int
+		survived, needReconst = genIdxRand(d, p, d, p)
+		survived, needReconst, needReconstData, err = r.checkReconst(survived, needReconst)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if needReconstData != 0 { // At least has one.
+			needReconst = needReconst[:needReconstData]
+			break
 		}
 	}
+
 	start1 := time.Now()
-	exp, err := r.getReconstMatrix(dpHas, dLost)
+	exp, err := r.getReconstMatrix(survived, needReconst)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cost1 := time.Now().Sub(start1)
 
 	start2 := time.Now()
-	act, err := r.getReconstMatrix(dpHas, dLost)
+	act, err := r.getReconstMatrix(survived, needReconst)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +547,7 @@ func BenchmarkRS_checkReconst(b *testing.B) {
 			b.Fatal(err)
 		}
 		for i := 1; i <= p; i++ {
-			is, ir := genIdxForReconst(d, p, d, i)
+			is, ir := genIdxRand(d, p, d, i)
 			b.Run(fmt.Sprintf("d:%d,p:%d,survived:%d,need_reconst:%d", d, p, len(is), len(ir)),
 				func(b *testing.B) {
 					b.ResetTimer()
