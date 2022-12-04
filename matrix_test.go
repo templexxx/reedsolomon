@@ -270,23 +270,6 @@ func (m matrix) isIdentity(n int) bool {
 	return bytes.Equal(m, im)
 }
 
-func makeLostRandom(n, lostN int) []int {
-	l := make([]int, lostN)
-	rand.Seed(time.Now().UnixNano())
-	c := 0
-	for {
-		if c == lostN {
-			break
-		}
-		v := rand.Intn(n)
-		if !isIn(v, l) {
-			l[c] = v
-			c++
-		}
-	}
-	return l
-}
-
 func BenchmarkMakeEncMatrixForReconst(b *testing.B) {
 	dps := [][2]int{ // data, parity
 		{4, 4},

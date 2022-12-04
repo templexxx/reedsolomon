@@ -189,24 +189,19 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 			t.Fatal(err)
 		}
 
-		lost := makeLostRandom(d+p, rand.Intn(p+1))
-		needReconst := lost[:rand.Intn(len(lost)+1)]
-		dpHas := makeHasFromLost(d+p, lost)
-		for _, h := range dpHas {
-			copy(act[h], exp[h])
+		survived, needReconst := genIdxRand(d, p, rand.Intn(d+p), rand.Intn(p+1))
+		for _, i := range survived {
+			copy(act[i], exp[i])
 		}
 
-		// TODO weird fix it.
-		// Try to reconstruct some health vectors.
-		// Although we want to reconstruct these vectors,
-		// but it maybe a mistake.
+		// Pollute vectors need to be reconstructed.
 		for _, nr := range needReconst {
 			if rand.Intn(4) == 1 { // 1/4 chance.
-				copy(act[nr], exp[nr])
+				fillRandom(act[nr])
 			}
 		}
 
-		err = r.Reconst(act, dpHas, needReconst)
+		err = r.Reconst(act, survived, needReconst)
 		if err != nil {
 			t.Fatal(err)
 		}
