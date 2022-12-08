@@ -58,12 +58,16 @@ const (
 	maxVects                   = 256
 	kib                        = 1024
 	mib                        = 1024 * kib
-	maxInverseMatrixCapInCache = 16 * mib // Keeping inverse matrix cache small, 16MiB is enough for most cases.
+	maxInverseMatrixCapInCache = 16 * mib // Keeping inverse matrix cache small, 16 MiB is enough for most cases.
 )
 
 // New create an RS with specific data & parity numbers.
 func New(dataNum, parityNum int) (r *RS, err error) {
 
+	return newWithFeature(dataNum, parityNum, featUnknown)
+}
+
+func newWithFeature(dataNum, parityNum, feat int) (r *RS, err error) {
 	d, p := dataNum, parityNum
 	if d <= 0 || p <= 0 || d+p > maxVects {
 		return nil, ErrIllegalVects
@@ -80,10 +84,13 @@ func New(dataNum, parityNum int) (r *RS, err error) {
 		r.inverseCacheMax = maxInverseMatrixCapInCache / uint64(r.DataNum) / uint64(r.DataNum)
 	}
 
-	r.cpuFeat = getCPUFeature()
+	r.cpuFeat = feat
+	if r.cpuFeat == featUnknown {
+		r.cpuFeat = getCPUFeature()
+	}
 
 	switch r.cpuFeat {
-	case avx512:
+	case featAVX512:
 		r.mulVect = func(c byte, d, p []byte) {
 			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
 			mulVectAVX512(tbl, d, p)
@@ -92,7 +99,7 @@ func New(dataNum, parityNum int) (r *RS, err error) {
 			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
 			mulVectXORAVX512(tbl, d, p)
 		}
-	case avx2:
+	case featAVX2:
 		r.mulVect = func(c byte, d, p []byte) {
 			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
 			mulVectAVX2(tbl, d, p)
@@ -104,7 +111,6 @@ func New(dataNum, parityNum int) (r *RS, err error) {
 	default:
 		r.mulVect = mulVectBase
 		r.mulVectXOR = mulVectXORBase
-
 	}
 
 	return
@@ -112,18 +118,19 @@ func New(dataNum, parityNum int) (r *RS, err error) {
 
 // CPU Features.
 const (
-	avx512 = iota
-	avx2
-	base // No supported features, using basic way.
+	featUnknown = iota
+	featAVX512
+	featAVX2
+	featBase // No supported features, using basic way.
 )
 
 func getCPUFeature() int {
 	if hasAVX512() && EnableAVX512 {
-		return avx512
+		return featAVX512
 	} else if cpu.X86.HasAVX2 {
-		return avx2
+		return featAVX2
 	} else {
-		return base
+		return featBase
 	}
 }
 
