@@ -44,14 +44,6 @@ type RS struct {
 	mulVectXOR func(c byte, d, p []byte)
 }
 
-// EnableAVX512 may slow down CPU Clock (maybe not).
-// TODO need more research:
-// https://lemire.me/blog/2018/04/19/by-how-much-does-avx-512-slow-down-your-cpu-a-first-experiment/
-//
-// You can modify it before new RS.
-// Warn: not thread-safe
-var EnableAVX512 = true
-
 var ErrIllegalVects = errors.New("illegal data/parity number: <= 0 or data+parity > 256")
 
 const (
@@ -90,15 +82,6 @@ func newWithFeature(dataNum, parityNum, feat int) (r *RS, err error) {
 	}
 
 	switch r.cpuFeat {
-	case featAVX512:
-		r.mulVect = func(c byte, d, p []byte) {
-			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
-			mulVectAVX512(tbl, d, p)
-		}
-		r.mulVectXOR = func(c byte, d, p []byte) {
-			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
-			mulVectXORAVX512(tbl, d, p)
-		}
 	case featAVX2:
 		r.mulVect = func(c byte, d, p []byte) {
 			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
@@ -119,34 +102,15 @@ func newWithFeature(dataNum, parityNum, feat int) (r *RS, err error) {
 // CPU Features.
 const (
 	featUnknown = iota
-	featAVX512
 	featAVX2
 	featBase // No supported features, using basic way.
 )
 
 func getCPUFeature() int {
-	if hasAVX512() && EnableAVX512 {
-		return featAVX512
-	} else if cpu.X86.HasAVX2 {
+	if cpu.X86.HasAVX2 {
 		return featAVX2
-	} else {
-		return featBase
 	}
-}
-
-func hasAVX512() (ok bool) {
-
-	return cpu.X86.HasAVX512VL &&
-		cpu.X86.HasAVX512BW &&
-		cpu.X86.HasAVX512F &&
-		cpu.X86.HasAVX512DQ
-}
-
-// DisableAVX512 disables avx512 feature.
-// warn:
-// not thread-safe
-func DisableAVX512() {
-	EnableAVX512 = false
+	return featBase
 }
 
 // Encode encodes data for generating parity.

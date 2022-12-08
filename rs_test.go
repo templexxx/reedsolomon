@@ -30,9 +30,6 @@ func TestRS_Encode(t *testing.T) {
 	testEncode(t, d, p, max, featBase, -1)
 
 	switch getCPUFeature() {
-	case featAVX512:
-		testEncode(t, d, p, max, featAVX2, featBase)
-		testEncode(t, d, p, max, featAVX512, featAVX2)
 	case featAVX2:
 		testEncode(t, d, p, max, featAVX2, featBase)
 	}
@@ -416,9 +413,6 @@ func BenchmarkRS_Encode(b *testing.B) {
 
 	var feats []int
 	switch getCPUFeature() {
-	case featAVX512:
-		feats = append(feats, featAVX512)
-		feats = append(feats, featAVX2)
 	case featAVX2:
 		feats = append(feats, featAVX2)
 	}
@@ -641,8 +635,6 @@ func benchReplace(b *testing.B, d, p, size, n int) {
 
 func featToStr(f int) string {
 	switch f {
-	case featAVX512:
-		return "AVX512"
 	case featAVX2:
 		return "AVX2"
 	case featBase:
