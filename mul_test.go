@@ -15,14 +15,14 @@ import (
 func TestMulVect(t *testing.T) {
 	max := testSize
 
-	testMulVect(t, max, base, -1)
+	testMulVect(t, max, featBase, featUnknown)
 
 	switch getCPUFeature() {
-	case avx512:
-		testMulVect(t, max, avx2, base)
-		testMulVect(t, max, avx512, avx2)
-	case avx2:
-		testMulVect(t, max, avx2, base)
+	case featAVX512:
+		testMulVect(t, max, featAVX2, featBase)
+		testMulVect(t, max, featAVX512, featAVX2)
+	case featAVX2:
+		testMulVect(t, max, featAVX2, featBase)
 	}
 }
 
@@ -33,7 +33,7 @@ func testMulVect(t *testing.T, maxSize, feat, cmpFeat int) {
 	fs := featToStr(feat)
 
 	start, n := 1, 1
-	if feat != base {
+	if feat != featBase {
 		start, n = 16, 16 // The min size for SIMD instructions.
 	}
 
@@ -46,12 +46,12 @@ func testMulVect(t *testing.T, maxSize, feat, cmpFeat int) {
 			mulVect(byte(c), d, act, feat)
 
 			exp := make([]byte, size)
-			if cmpFeat < 0 {
+			if cmpFeat == featUnknown {
 				for i, v := range d {
-					exp[i] = gfMul(uint8(c), v)
+					exp[i] = gfMul(uint8(c), v) // Using mul table, mul element one by one if using basic way.
 				}
 			} else {
-				mulVect(byte(c), d, exp, base)
+				mulVect(byte(c), d, exp, featBase)
 			}
 
 			if !bytes.Equal(act, exp) {
@@ -68,14 +68,14 @@ func testMulVect(t *testing.T, maxSize, feat, cmpFeat int) {
 func TestMulVectXOR(t *testing.T) {
 	max := testSize
 
-	testMulVectXOR(t, max, base, -1)
+	testMulVectXOR(t, max, featBase, -1)
 
 	switch getCPUFeature() {
-	case avx512:
-		testMulVectXOR(t, max, avx2, base)
-		testMulVectXOR(t, max, avx512, avx2)
-	case avx2:
-		testMulVectXOR(t, max, avx2, base)
+	case featAVX512:
+		testMulVectXOR(t, max, featAVX2, featBase)
+		testMulVectXOR(t, max, featAVX512, featAVX2)
+	case featAVX2:
+		testMulVectXOR(t, max, featAVX2, featBase)
 	}
 }
 
@@ -86,7 +86,7 @@ func testMulVectXOR(t *testing.T, maxSize, feat, cmpFeat int) {
 	fs := featToStr(feat)
 
 	start, n := 1, 1
-	if feat != base {
+	if feat != featBase {
 		start, n = 16, 16 // The min size for SIMD instructions.
 	}
 

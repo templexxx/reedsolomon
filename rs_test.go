@@ -27,14 +27,14 @@ func TestRS_Encode(t *testing.T) {
 	d, p := testDataNum, testParityNum
 	max := testSize
 
-	testEncode(t, d, p, max, base, -1)
+	testEncode(t, d, p, max, featBase, -1)
 
 	switch getCPUFeature() {
-	case avx512:
-		testEncode(t, d, p, max, avx2, base)
-		testEncode(t, d, p, max, avx512, avx2)
-	case avx2:
-		testEncode(t, d, p, max, avx2, base)
+	case featAVX512:
+		testEncode(t, d, p, max, featAVX2, featBase)
+		testEncode(t, d, p, max, featAVX512, featAVX2)
+	case featAVX2:
+		testEncode(t, d, p, max, featAVX2, featBase)
 	}
 }
 
@@ -212,18 +212,6 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 			}
 		}
 	}
-}
-
-func makeHasFromLost(n int, lost []int) []int {
-	s := make([]int, n-len(lost))
-	c := 0
-	for i := 0; i < n; i++ {
-		if !isIn(i, lost) {
-			s[c] = i
-			c++
-		}
-	}
-	return s
 }
 
 func TestRS_Update(t *testing.T) {
@@ -428,13 +416,13 @@ func BenchmarkRS_Encode(b *testing.B) {
 
 	var feats []int
 	switch getCPUFeature() {
-	case avx512:
-		feats = append(feats, avx512)
-		feats = append(feats, avx2)
-	case avx2:
-		feats = append(feats, avx2)
+	case featAVX512:
+		feats = append(feats, featAVX512)
+		feats = append(feats, featAVX2)
+	case featAVX2:
+		feats = append(feats, featAVX2)
 	}
-	feats = append(feats, base)
+	feats = append(feats, featBase)
 
 	b.Run("", benchmarkEncode(benchEnc, feats, dps, sizes))
 }
@@ -463,11 +451,10 @@ func benchEnc(b *testing.B, d, p, size, feat int) {
 	for j := 0; j < d; j++ {
 		fillRandom(vects[j])
 	}
-	r, err := New(d, p)
+	r, err := newWithFeature(d, p, feat)
 	if err != nil {
 		b.Fatal(err)
 	}
-	r.cpuFeat = feat
 
 	b.SetBytes(int64((d + p) * size))
 	b.ResetTimer()
@@ -494,16 +481,15 @@ func benchmarkReconst(f func(*testing.B, int, int, int, []int, []int), d, p, siz
 	}
 	return func(b *testing.B) {
 		for i := 1; i <= p; i++ {
-			lost := datas[:i]
-			dpHas := makeHasFromLost(d+p, lost)
+			survived, needReconst := genIdxRand(d, p, d+p-i, i)
 			b.Run(fmt.Sprintf("(%d+%d)-%s-reconst_%d_data_vects-%s",
 				d, p, byteToStr(size), i, featToStr(getCPUFeature())),
-				func(b *testing.B) { f(b, d, p, size, dpHas, lost) })
+				func(b *testing.B) { f(b, d, p, size, survived, needReconst) })
 		}
 	}
 }
 
-func benchReconst(b *testing.B, d, p, size int, dpHas, needReconst []int) {
+func benchReconst(b *testing.B, d, p, size int, survived, needReconst []int) {
 	vects := make([][]byte, d+p)
 	for j := 0; j < d+p; j++ {
 		vects[j] = make([]byte, size)
@@ -523,7 +509,7 @@ func benchReconst(b *testing.B, d, p, size int, dpHas, needReconst []int) {
 	b.SetBytes(int64((d + len(needReconst)) * size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err = r.Reconst(vects, dpHas, needReconst)
+		err = r.Reconst(vects, survived, needReconst)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -655,11 +641,11 @@ func benchReplace(b *testing.B, d, p, size, n int) {
 
 func featToStr(f int) string {
 	switch f {
-	case avx512:
+	case featAVX512:
 		return "AVX512"
-	case avx2:
+	case featAVX2:
 		return "AVX2"
-	case base:
+	case featBase:
 		return "Base"
 	default:
 		return "Tested"

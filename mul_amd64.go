@@ -9,10 +9,10 @@ package reedsolomon
 // Then write result(p).
 func mulVect(c byte, d, p []byte, cpuFeature int) {
 	switch cpuFeature {
-	case avx512:
+	case featAVX512:
 		tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
 		mulVectAVX512(tbl, d, p)
-	case avx2:
+	case featAVX2:
 		tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
 		mulVectAVX2(tbl, d, p)
 	default:
@@ -24,10 +24,10 @@ func mulVect(c byte, d, p []byte, cpuFeature int) {
 // Then update result(p) by XOR old result(p).
 func mulVectXOR(c byte, d, p []byte, cpuFeature int) {
 	switch cpuFeature {
-	case avx512:
+	case featAVX512:
 		tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
 		mulVectXORAVX512(tbl, d, p)
-	case avx2:
+	case featAVX2:
 		tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
 		mulVectXORAVX2(tbl, d, p)
 	default:
