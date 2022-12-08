@@ -18,9 +18,6 @@ func TestMulVect(t *testing.T) {
 	testMulVect(t, max, featBase, featUnknown)
 
 	switch getCPUFeature() {
-	case featAVX512:
-		testMulVect(t, max, featAVX2, featBase)
-		testMulVect(t, max, featAVX512, featAVX2)
 	case featAVX2:
 		testMulVect(t, max, featAVX2, featBase)
 	}
@@ -71,9 +68,6 @@ func TestMulVectXOR(t *testing.T) {
 	testMulVectXOR(t, max, featBase, -1)
 
 	switch getCPUFeature() {
-	case featAVX512:
-		testMulVectXOR(t, max, featAVX2, featBase)
-		testMulVectXOR(t, max, featAVX512, featAVX2)
 	case featAVX2:
 		testMulVectXOR(t, max, featAVX2, featBase)
 	}
@@ -117,4 +111,28 @@ func testMulVectXOR(t *testing.T, maxSize, feat, cmpFeat int) {
 
 	t.Logf("%s pass, max_size: %d",
 		fs, maxSize)
+}
+
+// Coefficient multiply by vector(d).
+// Then write result(p).
+func mulVect(c byte, d, p []byte, cpuFeature int) {
+	switch cpuFeature {
+	case featAVX2:
+		tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
+		mulVectAVX2(tbl, d, p)
+	default:
+		mulVectBase(c, d, p)
+	}
+}
+
+// Coefficient multiply by vector(d).
+// Then update result(p) by XOR old result(p).
+func mulVectXOR(c byte, d, p []byte, cpuFeature int) {
+	switch cpuFeature {
+	case featAVX2:
+		tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
+		mulVectXORAVX2(tbl, d, p)
+	default:
+		mulVectXORBase(c, d, p)
+	}
 }
