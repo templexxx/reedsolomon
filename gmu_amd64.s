@@ -3,8 +3,6 @@
 // Use of this source code is governed by the MIT License
 // that can be found in the LICENSE file.
 
-#include "textflag.h"
-
 #define low_tbl Y0
 #define high_tbl Y1
 #define mask Y2
@@ -39,7 +37,7 @@
 #define tmp3x  X13
 
 // func mulVectAVX2(tbl, d, p []byte)
-TEXT ·mulVectAVX2(SB), NOSPLIT, $0
+TEXT ·mulVectAVX2(SB), 4, $0
 	MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
@@ -183,7 +181,7 @@ one16b:
 	RET
 
 // func mulVectXORAVX2(tbl, d, p []byte)
-TEXT ·mulVectXORAVX2(SB), NOSPLIT, $0
+TEXT ·mulVectXORAVX2(SB), 4, $0
 	MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
 	MOVQ         tbl+0(FP), tmp0
