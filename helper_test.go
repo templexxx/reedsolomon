@@ -1,6 +1,7 @@
 package reedsolomon
 
 import (
+	"fmt"
 	"math/rand"
 	"sort"
 	"testing"
@@ -151,6 +152,50 @@ func genNeedReconstRand(d, p, needReconstN int) []int {
 		}
 	}
 	return s
+}
+
+func (r *RS) mul(vects [][]byte) error {
+	r.GenMatrix.mul(vects, r.DataNum, r.ParityNum, len(vects[0]))
+	return nil
+}
+
+// m(generator matrix) * vectors,
+// it's the basic matrix multiply.
+func (m matrix) mul(vects [][]byte, input, output, n int) {
+	src := vects[:input]
+	out := vects[input:]
+	for i := 0; i < output; i++ {
+		for j := 0; j < n; j++ {
+			var s uint8
+			for k := 0; k < input; k++ {
+				s ^= gfMul(src[k][j], m[i*input+k])
+			}
+			out[i][j] = s
+		}
+	}
+}
+
+func featToStr(f int) string {
+	switch f {
+	case featAVX2:
+		return "AVX2"
+	case featNoSIMD:
+		return "No-SIMD"
+	default:
+		return "Tested"
+	}
+}
+
+func fillRandom(p []byte) {
+	rand.Read(p)
+}
+
+func byteToStr(n int) string {
+	if n >= mib {
+		return fmt.Sprintf("%dmib", n/mib)
+	}
+
+	return fmt.Sprintf("%dkib", n/kib)
 }
 
 func isIn(e int, s []int) bool {

@@ -16,73 +16,12 @@ import (
 )
 
 const (
-	kb            = 1024
-	mb            = 1024 * 1024
 	testDataNum   = 10
 	testParityNum = 4
-	testSize      = kb
+	testSize      = kib // enough for covering branches when using SIMD
 )
 
-func TestRS_Encode(t *testing.T) {
-	d, p := testDataNum, testParityNum
-	max := testSize
-
-	testEncode(t, d, p, max, featBase, -1)
-
-	switch getCPUFeature() {
-	case featAVX2:
-		testEncode(t, d, p, max, featAVX2, featBase)
-	}
-}
-
-func testEncode(t *testing.T, d, p, maxSize, feat, cmpFeat int) {
-
-	rand.Seed(time.Now().UnixNano())
-
-	fs := featToStr(feat)
-	for size := 1; size <= maxSize; size++ {
-		exp := make([][]byte, d+p)
-		act := make([][]byte, d+p)
-		for j := 0; j < d+p; j++ {
-			exp[j], act[j] = make([]byte, size), make([]byte, size)
-		}
-		for j := 0; j < d; j++ {
-			fillRandom(exp[j])
-			copy(act[j], exp[j])
-		}
-		r, err := New(d, p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		r.cpuFeat = feat
-		err = r.Encode(act)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var f func(vects [][]byte) error
-		if cmpFeat < 0 {
-			f = r.mul
-		} else {
-			r.cpuFeat = cmpFeat
-			f = r.Encode
-		}
-		err = f(exp)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for j := range exp {
-			if !bytes.Equal(exp[j], act[j]) {
-				t.Fatalf("%s mismatched with %s, vect: %d, size: %d",
-					fs, featToStr(cmpFeat), j, size)
-			}
-		}
-	}
-
-	t.Logf("%s pass %d+%d, max_size: %d",
-		fs, d, p, maxSize)
-}
-
+// Check basic matrix multiply.
 // Powered by MATLAB.
 func TestRS_mul(t *testing.T) {
 	d, p := 5, 5
@@ -109,26 +48,67 @@ func TestRS_mul(t *testing.T) {
 	}
 }
 
-// Wrap matrix.mul.
-func (r *RS) mul(vects [][]byte) error {
-	r.GenMatrix.mul(vects, r.DataNum, r.ParityNum, len(vects[0]))
-	return nil
+func TestRS_Encode(t *testing.T) {
+	d, p := testDataNum, testParityNum
+	max := testSize
+
+	testEncode(t, d, p, max, featNoSIMD, featUnknown)
+
+	switch getCPUFeature() {
+	case featAVX2:
+		testEncode(t, d, p, max, featAVX2, featNoSIMD)
+	}
 }
 
-// m(generator matrix) * vectors,
-// it's the basic matrix multiply.
-func (m matrix) mul(vects [][]byte, d, p, n int) {
-	src := vects[:d]
-	out := vects[d:]
-	for i := 0; i < p; i++ {
-		for j := 0; j < n; j++ {
-			var s uint8
-			for k := 0; k < d; k++ {
-				s ^= gfMul(src[k][j], m[i*d+k])
+func testEncode(t *testing.T, d, p, maxSize, feat, cmpFeat int) {
+
+	fs := featToStr(feat)
+	cmpfs := featToStr(cmpFeat)
+
+	for size := 1; size <= maxSize; size++ {
+		exp := make([][]byte, d+p)
+		act := make([][]byte, d+p)
+		for j := 0; j < d+p; j++ {
+			exp[j], act[j] = make([]byte, size), make([]byte, size)
+		}
+		for j := 0; j < d; j++ {
+			fillRandom(exp[j])
+			copy(act[j], exp[j])
+		}
+		r, err := newWithFeature(d, p, feat)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = r.Encode(act)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var f func(vects [][]byte) error
+		if cmpFeat == featUnknown {
+			f = r.mul
+		} else {
+			r2, err := newWithFeature(d, p, cmpFeat)
+			if err != nil {
+				t.Fatal(err)
 			}
-			out[i][j] = s
+			f = r2.Encode
+		}
+		err = f(exp)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for j := range exp {
+			if !bytes.Equal(exp[j], act[j]) {
+				t.Fatalf("%s mismatched with %s: %d+%d, vect: %d, size: %d",
+					fs, cmpfs, d, p, j, size)
+			}
 		}
 	}
+
+	t.Logf("%s matched %s: %d+%d, size: [1, %d)",
+		fs, cmpfs, d, p, maxSize+1)
 }
 
 func TestMakeInverseCacheKey(t *testing.T) {
@@ -158,7 +138,7 @@ func TestMakeInverseCacheKey(t *testing.T) {
 }
 
 func TestRS_Reconst(t *testing.T) {
-	testReconst(t, testDataNum, testParityNum, 1024, 128)
+	testReconst(t, testDataNum, testParityNum, testSize, 128)
 }
 
 func testReconst(t *testing.T, d, p, size, loop int) {
@@ -406,9 +386,9 @@ func BenchmarkRS_Encode(b *testing.B) {
 	}
 
 	sizes := []int{
-		4 * kb,
-		mb,
-		8 * mb,
+		4 * kib,
+		mib,
+		8 * mib,
 	}
 
 	var feats []int
@@ -416,7 +396,7 @@ func BenchmarkRS_Encode(b *testing.B) {
 	case featAVX2:
 		feats = append(feats, featAVX2)
 	}
-	feats = append(feats, featBase)
+	feats = append(feats, featNoSIMD)
 
 	b.Run("", benchmarkEncode(benchEnc, feats, dps, sizes))
 }
@@ -462,7 +442,7 @@ func benchEnc(b *testing.B, d, p, size, feat int) {
 
 func BenchmarkRS_Reconst(b *testing.B) {
 	d, p := 10, 4
-	size := 4 * kb
+	size := 4 * kib
 
 	b.Run("", benchmarkReconst(benchReconst, d, p, size))
 }
@@ -539,7 +519,7 @@ func BenchmarkRS_checkReconst(b *testing.B) {
 
 func BenchmarkRS_Update(b *testing.B) {
 	d, p := 10, 4
-	size := 4 * kb
+	size := 4 * kib
 
 	b.Run("", benchmarkUpdate(benchUpdate, d, p, size))
 }
@@ -586,7 +566,7 @@ func benchUpdate(b *testing.B, d, p, size, updateRow int) {
 
 func BenchmarkRS_Replace(b *testing.B) {
 	d, p := 10, 4
-	size := 4 * kb
+	size := 4 * kib
 
 	b.Run("", benchmarkReplace(benchReplace, d, p, size))
 }
@@ -631,27 +611,4 @@ func benchReplace(b *testing.B, d, p, size, n int) {
 			b.Fatal(err)
 		}
 	}
-}
-
-func featToStr(f int) string {
-	switch f {
-	case featAVX2:
-		return "AVX2"
-	case featBase:
-		return "Base"
-	default:
-		return "Tested"
-	}
-}
-
-func fillRandom(p []byte) {
-	rand.Read(p)
-}
-
-func byteToStr(n int) string {
-	if n >= mb {
-		return fmt.Sprintf("%dMB", n/mb)
-	}
-
-	return fmt.Sprintf("%dKB", n/kb)
 }

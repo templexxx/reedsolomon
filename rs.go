@@ -40,8 +40,7 @@ type RS struct {
 	inverseCacheMax uint64
 	inverseCacheN   uint64 // cached inverse matrix.
 
-	mulVect    func(c byte, d, p []byte)
-	mulVectXOR func(c byte, d, p []byte)
+	*gmu
 }
 
 var ErrIllegalVects = errors.New("illegal data/parity number: <= 0 or data+parity > 256")
@@ -81,20 +80,8 @@ func newWithFeature(dataNum, parityNum, feat int) (r *RS, err error) {
 		r.cpuFeat = getCPUFeature()
 	}
 
-	switch r.cpuFeat {
-	case featAVX2:
-		r.mulVect = func(c byte, d, p []byte) {
-			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
-			mulVectAVX2(tbl, d, p)
-		}
-		r.mulVectXOR = func(c byte, d, p []byte) {
-			tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
-			mulVectXORAVX2(tbl, d, p)
-		}
-	default:
-		r.mulVect = mulVectBase
-		r.mulVectXOR = mulVectXORBase
-	}
+	r.gmu = new(gmu)
+	r.initFunc(r.cpuFeat)
 
 	return
 }
@@ -103,14 +90,14 @@ func newWithFeature(dataNum, parityNum, feat int) (r *RS, err error) {
 const (
 	featUnknown = iota
 	featAVX2
-	featBase // No supported features, using basic way.
+	featNoSIMD
 )
 
 func getCPUFeature() int {
 	if cpu.X86.HasAVX2 {
 		return featAVX2
 	}
-	return featBase
+	return featNoSIMD
 }
 
 // Encode encodes data for generating parity.
@@ -209,9 +196,9 @@ func (r *RS) encodePart(start, end int, dv, pv [][]byte, updateOnly bool) {
 		for i := 0; i < d; i++ {
 			for j := 0; j < p; j++ {
 				if i != 0 || updateOnly {
-					mulVectXORBase(g[j*d+i], dv[i][start:end], pv[j][start:end])
+					mulVectXOR(g[j*d+i], dv[i][start:end], pv[j][start:end])
 				} else {
-					mulVectBase(g[j*d], dv[0][start:end], pv[j][start:end])
+					mulVect(g[j*d], dv[0][start:end], pv[j][start:end])
 				}
 			}
 		}
@@ -390,7 +377,7 @@ func (r *RS) reconstParity(vects [][]byte, needReconst []int) (err error) {
 
 func (r *RS) reconst(vects [][]byte, gm matrix, pn int) error {
 
-	rTmp := &RS{DataNum: r.DataNum, ParityNum: pn, GenMatrix: gm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
+	rTmp := &RS{DataNum: r.DataNum, ParityNum: pn, GenMatrix: gm, cpuFeat: r.cpuFeat, gmu: r.gmu}
 	return rTmp.Encode(vects)
 
 }
@@ -459,7 +446,7 @@ func (r *RS) Update(oldData []byte, newData []byte, row int, parity [][]byte) (e
 		gm[i] = c
 		vects[i+1] = parity[i]
 	}
-	rs := &RS{DataNum: 1, ParityNum: r.ParityNum, GenMatrix: gm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
+	rs := &RS{DataNum: 1, ParityNum: r.ParityNum, GenMatrix: gm, cpuFeat: r.cpuFeat, gmu: r.gmu}
 	rs.encode(vects, true)
 	return nil
 }
@@ -543,7 +530,7 @@ func (r *RS) Replace(data [][]byte, replaceRows []int, parity [][]byte) (err err
 	}
 
 	updateRS := &RS{DataNum: rn, ParityNum: p,
-		GenMatrix: gm, cpuFeat: r.cpuFeat, mulVect: r.mulVect, mulVectXOR: r.mulVectXOR}
+		GenMatrix: gm, cpuFeat: r.cpuFeat, gmu: r.gmu}
 	updateRS.encode(vects, true)
 	return nil
 }
