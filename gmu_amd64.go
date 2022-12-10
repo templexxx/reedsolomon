@@ -16,18 +16,18 @@ func (g *gmu) initFunc(feat int) {
 	}
 }
 
-func mulVectAVX2C(c byte, d, p []byte) {
+func mulVectAVX2C(c byte, input, output []byte) {
 	tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
-	mulVectAVX2(tbl, d, p)
+	mulVectAVX2(tbl, input, output)
 }
 
-func mulVectXORAVX2C(c byte, d, p []byte) {
+func mulVectXORAVX2C(c byte, input, output []byte) {
 	tbl := lowHighTbl[int(c)*32 : int(c)*32+32]
-	mulVectXORAVX2(tbl, d, p)
+	mulVectXORAVX2(tbl, input, output)
 }
 
 //go:noescape
-func mulVectAVX2(tbl, d, p []byte)
+func mulVectAVX2(tbl, input, output []byte)
 
 //go:noescape
-func mulVectXORAVX2(tbl, d, p []byte)
+func mulVectXORAVX2(tbl, input, output []byte)

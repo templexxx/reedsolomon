@@ -40,20 +40,20 @@ func testGMU(t *testing.T, maxSize, feat, cmpFeat int) {
 
 	for size := start; size <= maxSize; size += n {
 		for c := 0; c <= 255; c++ {
-			d := make([]byte, size)
+			input := make([]byte, size)
 			act := make([]byte, size)
-			fillRandom(d)
+			fillRandom(input)
 
-			g.mulVect(byte(c), d, act)
+			g.mulVect(byte(c), input, act)
 			exp := make([]byte, size)
-			cg.mulVect(byte(c), d, exp)
+			cg.mulVect(byte(c), input, exp)
 			if !bytes.Equal(act, exp) {
 				t.Fatalf("%s mismatched with %s, size: %d",
 					fs, featToStr(cmpFeat), size)
 			}
 
-			g.mulVectXOR(byte(c), d, act)
-			cg.mulVectXOR(byte(c), d, exp)
+			g.mulVectXOR(byte(c), input, act)
+			cg.mulVectXOR(byte(c), input, exp)
 			if !bytes.Equal(act, exp) {
 				t.Fatalf("%s mismatched with %s, size: %d",
 					fs, featToStr(cmpFeat), size)
