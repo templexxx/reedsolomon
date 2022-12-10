@@ -15,10 +15,10 @@ func mulVect(c byte, input, output []byte) {
 	}
 }
 
-func mulVectXOR(c byte, d, p []byte) {
+func mulVectXOR(c byte, input, output []byte) {
 	t := mulTbl[c][:256]
-	for i := 0; i < len(d); i++ {
-		p[i] ^= t[d[i]]
+	for i := 0; i < len(input); i++ {
+		output[i] ^= t[input[i]]
 	}
 }
 

@@ -36,7 +36,7 @@
 #define tmp2x  X12
 #define tmp3x  X13
 
-// func mulVectAVX2(tbl, d, p []byte)
+// func mulVectAVX2(tbl, input, ouput []byte)
 TEXT ·mulVectAVX2(SB), 4, $0
 	MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
@@ -180,7 +180,7 @@ one16b:
 	JNE     ymm
 	RET
 
-// func mulVectXORAVX2(tbl, d, p []byte)
+// func mulVectXORAVX2(tbl, input, output []byte)
 TEXT ·mulVectXORAVX2(SB), 4, $0
 	MOVQ         i+24(FP), in
 	MOVQ         o+48(FP), out
