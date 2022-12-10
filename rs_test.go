@@ -18,7 +18,7 @@ import (
 const (
 	testDataNum   = 10
 	testParityNum = 4
-	testSize      = kib // enough for covering branches when using SIMD
+	testSize      = kib // enough for covering branches when using SIMD & GF8
 )
 
 // Check basic matrix multiply.
@@ -48,7 +48,30 @@ func TestRS_mul(t *testing.T) {
 	}
 }
 
+// generate_matrix * vects, basic matrix multiply.
+// For verifying encoding.
+func (r *RS) mul(vects [][]byte) error {
+	r.GenMatrix.mul(vects, r.DataNum, r.ParityNum, len(vects[0]))
+	return nil
+}
+
+func (m matrix) mul(vects [][]byte, input, output, n int) {
+	src := vects[:input]
+	out := vects[input:]
+	for i := 0; i < output; i++ {
+		for j := 0; j < n; j++ {
+			var s uint8
+			for k := 0; k < input; k++ {
+				s ^= gfMul(src[k][j], m[i*input+k])
+			}
+			out[i][j] = s
+		}
+	}
+}
+
 func TestRS_Encode(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+
 	d, p := testDataNum, testParityNum
 	max := testSize
 
@@ -56,7 +79,7 @@ func TestRS_Encode(t *testing.T) {
 
 	switch getCPUFeature() {
 	case featAVX2:
-		testEncode(t, d, p, max, featAVX2, featNoSIMD)
+		testEncode(t, d, p, max, featAVX2, featNoSIMD) // comparing with verified feature for speeding up.
 	}
 }
 
@@ -138,12 +161,12 @@ func TestMakeInverseCacheKey(t *testing.T) {
 }
 
 func TestRS_Reconst(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+
 	testReconst(t, testDataNum, testParityNum, testSize, 128)
 }
 
 func testReconst(t *testing.T, d, p, size, loop int) {
-
-	rand.Seed(time.Now().UnixNano())
 
 	r, err := New(d, p)
 	if err != nil {
@@ -192,12 +215,12 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 }
 
 func TestRS_Update(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+
 	testUpdate(t, testDataNum, testParityNum, testSize)
 }
 
 func testUpdate(t *testing.T, d, p, size int) {
-
-	rand.Seed(time.Now().UnixNano())
 
 	for i := 0; i < d; i++ {
 		act := make([][]byte, d+p)
@@ -241,13 +264,13 @@ func testUpdate(t *testing.T, d, p, size int) {
 }
 
 func TestRS_Replace(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+
 	testReplace(t, testDataNum, testParityNum, testSize, 128, true)
 	testReplace(t, testDataNum, testParityNum, testSize, 128, false)
 }
 
 func testReplace(t *testing.T, d, p, size, loop int, toZero bool) {
-
-	rand.Seed(time.Now().UnixNano())
 
 	for i := 0; i < loop; i++ {
 		replaceRows := makeReplaceRowRandom(d)
@@ -302,7 +325,6 @@ func testReplace(t *testing.T, d, p, size, loop int, toZero bool) {
 				t.Fatalf("replace failed: vect: %d, size: %d", j, size)
 			}
 		}
-
 	}
 }
 
@@ -386,9 +408,8 @@ func BenchmarkRS_Encode(b *testing.B) {
 	}
 
 	sizes := []int{
-		4 * kib,
-		mib,
-		8 * mib,
+		8 * kib, // Hot
+		mib,     // Cold
 	}
 
 	var feats []int
@@ -398,19 +419,13 @@ func BenchmarkRS_Encode(b *testing.B) {
 	}
 	feats = append(feats, featNoSIMD)
 
-	b.Run("", benchmarkEncode(benchEnc, feats, dps, sizes))
-}
-
-func benchmarkEncode(f func(*testing.B, int, int, int, int), feats []int, dps [][]int, sizes []int) func(*testing.B) {
-	return func(b *testing.B) {
-		for _, feat := range feats {
-			for _, dp := range dps {
-				d, p := dp[0], dp[1]
-				for _, size := range sizes {
-					b.Run(fmt.Sprintf("(%d+%d)-%s-%s", d, p, byteToStr(size), featToStr(feat)), func(b *testing.B) {
-						f(b, d, p, size, feat)
-					})
-				}
+	for _, feat := range feats {
+		for _, dp := range dps {
+			d, p := dp[0], dp[1]
+			for _, size := range sizes {
+				b.Run(fmt.Sprintf("(%d+%d)-%s-%s", d, p, byteToStr(size), featToStr(feat)), func(b *testing.B) {
+					benchEnc(b, d, p, size, feat)
+				})
 			}
 		}
 	}
@@ -442,24 +457,13 @@ func benchEnc(b *testing.B, d, p, size, feat int) {
 
 func BenchmarkRS_Reconst(b *testing.B) {
 	d, p := 10, 4
-	size := 4 * kib
+	size := 8 * kib
 
-	b.Run("", benchmarkReconst(benchReconst, d, p, size))
-}
-
-func benchmarkReconst(f func(*testing.B, int, int, int, []int, []int), d, p, size int) func(*testing.B) {
-
-	datas := make([]int, d)
-	for i := range datas {
-		datas[i] = i
-	}
-	return func(b *testing.B) {
-		for i := 1; i <= p; i++ {
-			survived, needReconst := genIdxRand(d, p, d+p-i, i)
-			b.Run(fmt.Sprintf("(%d+%d)-%s-reconst_%d_data_vects-%s",
-				d, p, byteToStr(size), i, featToStr(getCPUFeature())),
-				func(b *testing.B) { f(b, d, p, size, survived, needReconst) })
-		}
+	for i := 1; i <= p; i++ {
+		survived, needReconst := genIdxRand(d, p, d+p-i, i)
+		b.Run(fmt.Sprintf("(%d+%d)-%s-reconst_%d_data_vects-%s",
+			d, p, byteToStr(size), i, featToStr(getCPUFeature())),
+			func(b *testing.B) { benchReconst(b, d, p, size, survived, needReconst) })
 	}
 }
 
@@ -519,19 +523,12 @@ func BenchmarkRS_checkReconst(b *testing.B) {
 
 func BenchmarkRS_Update(b *testing.B) {
 	d, p := 10, 4
-	size := 4 * kib
+	size := 8 * kib
 
-	b.Run("", benchmarkUpdate(benchUpdate, d, p, size))
-}
-
-func benchmarkUpdate(f func(*testing.B, int, int, int, int), d, p, size int) func(*testing.B) {
-
-	return func(b *testing.B) {
-		updateRow := rand.Intn(d)
-		b.Run(fmt.Sprintf("(%d+%d)-%s-%s",
-			d, p, byteToStr(size), featToStr(getCPUFeature())),
-			func(b *testing.B) { f(b, d, p, size, updateRow) })
-	}
+	updateRow := rand.Intn(d)
+	b.Run(fmt.Sprintf("(%d+%d)-%s-%s",
+		d, p, byteToStr(size), featToStr(getCPUFeature())),
+		func(b *testing.B) { benchUpdate(b, d, p, size, updateRow) })
 }
 
 func benchUpdate(b *testing.B, d, p, size, updateRow int) {
@@ -566,19 +563,12 @@ func benchUpdate(b *testing.B, d, p, size, updateRow int) {
 
 func BenchmarkRS_Replace(b *testing.B) {
 	d, p := 10, 4
-	size := 4 * kib
+	size := 8 * kib
 
-	b.Run("", benchmarkReplace(benchReplace, d, p, size))
-}
-
-func benchmarkReplace(f func(*testing.B, int, int, int, int), d, p, size int) func(*testing.B) {
-
-	return func(b *testing.B) {
-		for i := 1; i <= d-p; i++ {
-			b.Run(fmt.Sprintf("(%d+%d)-%s-replace_%d_data_vects-%s",
-				d, p, byteToStr(size), i, featToStr(getCPUFeature())),
-				func(b *testing.B) { f(b, d, p, size, i) })
-		}
+	for i := 1; i <= d-p; i++ {
+		b.Run(fmt.Sprintf("(%d+%d)-%s-replace_%d_data_vects-%s",
+			d, p, byteToStr(size), i, featToStr(getCPUFeature())),
+			func(b *testing.B) { benchReplace(b, d, p, size, i) })
 	}
 }
 
