@@ -11,8 +11,8 @@ func (g *gmu) initFunc(feat int) {
 		g.mulVect = mulVectAVX2C
 		g.mulVectXOR = mulVectXORAVX2C
 	default:
-		g.mulVect = mulVect
-		g.mulVectXOR = mulVectXOR
+		g.mulVect = mulVectNoSIMD
+		g.mulVectXOR = mulVectXORNoSIMD
 	}
 }
 

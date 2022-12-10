@@ -4,6 +4,6 @@
 package reedsolomon
 
 func (g *gmu) init(feat int) {
-	g.mulVect = mulVect
-	g.mulVectXOR = mulVectXOR
+	g.mulVect = mulVectNoSIMD
+	g.mulVectXOR = mulVectXORNoSIMD
 }

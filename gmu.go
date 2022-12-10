@@ -8,14 +8,14 @@ type gmu struct {
 	mulVectXOR func(c byte, input, output []byte)
 }
 
-func mulVect(c byte, input, output []byte) {
+func mulVectNoSIMD(c byte, input, output []byte) {
 	t := mulTbl[c][:256]
 	for i := 0; i < len(input); i++ {
 		output[i] = t[input[i]]
 	}
 }
 
-func mulVectXOR(c byte, input, output []byte) {
+func mulVectXORNoSIMD(c byte, input, output []byte) {
 	t := mulTbl[c][:256]
 	for i := 0; i < len(input); i++ {
 		output[i] ^= t[input[i]]

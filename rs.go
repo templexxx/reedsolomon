@@ -196,9 +196,9 @@ func (r *RS) encodePart(start, end int, dv, pv [][]byte, updateOnly bool) {
 		for i := 0; i < d; i++ {
 			for j := 0; j < p; j++ {
 				if i != 0 || updateOnly {
-					mulVectXOR(g[j*d+i], dv[i][start:end], pv[j][start:end])
+					mulVectXORNoSIMD(g[j*d+i], dv[i][start:end], pv[j][start:end])
 				} else {
-					mulVect(g[j*d], dv[0][start:end], pv[j][start:end])
+					mulVectNoSIMD(g[j*d], dv[0][start:end], pv[j][start:end])
 				}
 			}
 		}
