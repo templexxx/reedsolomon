@@ -280,27 +280,22 @@ func BenchmarkMakeEncMatrixForReconst(b *testing.B) {
 		{255, 1},
 		{256, 0},
 	}
-	b.Run("", benchMatrixInvertRun(benchMakeEncMatrixForReconst, dps))
+	benchMatrixInvertRun(b, dps)
 }
 
-func benchMatrixInvertRun(f func(*testing.B, int, int), dps [][2]int) func(*testing.B) {
-	return func(b *testing.B) {
-		for _, dp := range dps {
-			b.Run(fmt.Sprintf("(%d+%d)", dp[0], dp[1]), func(b *testing.B) {
-				f(b, dp[0], dp[1])
-			})
-		}
-	}
-}
-
-func benchMakeEncMatrixForReconst(b *testing.B, d, p int) {
-	m := makeEncodeMatrix(d, p)
-	survived, _ := genIdxRand(d, p, d, p)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := m.makeEncMatrixForReconst(survived)
-		if err != nil {
-			b.Fatal(err)
-		}
+func benchMatrixInvertRun(b *testing.B, dps [][2]int) {
+	for _, dp := range dps {
+		d, p := dp[0], dp[1]
+		b.Run(fmt.Sprintf("(%d+%d)", d, p), func(b *testing.B) {
+			m := makeEncodeMatrix(d, p)
+			survived, _ := genIdxRand(d, p, d, p)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := m.makeEncMatrixForReconst(survived)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
