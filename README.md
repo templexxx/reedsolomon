@@ -21,7 +21,7 @@
 >- It's a kind of [Systematic Codes](https://en.wikipedia.org/wiki/Systematic_code), which means 
 the input data is embedded in the encoded output .
 >
->- [High Performance](https://github.com/templexxx/reedsolomon#performance): More than 15GB/s per physics core. 
+>- [High Performance](https://github.com/templexxx/reedsolomon#performance): dozens GikB/s per physics core. 
 >
 >- High Reliability: 
 >  1. At least two companies are using this library in their storage system.
@@ -83,7 +83,12 @@ Performance depends mainly on:
 
 **Platform:** 
 
-*AWS c5d.xlarge (Intel(R) Xeon(R) Platinum 8124M CPU @ 3.00GHz)*
+```
+goos: linux
+goarch: amd64
+pkg: github.com/templexxx/reedsolomon
+cpu: 12th Gen Intel(R) Core(TM) i7-12700K
+```
 
 **All test run on a single Core.**
 
@@ -91,58 +96,53 @@ Performance depends mainly on:
 
 `I/O = (data + parity) * vector_size / cost`
 
-*Base means no SIMD.*
-
-| Data  | Parity  | Vector size | AVX512 I/O (MB/S) |  AVX2 I/O (MB/S) |Base I/O (MB/S) |
-|-------|---------|-------------|-------------|---------------|---------------|
-|10|2|4KB|       29683.69   |    21371.43      |   910.45       |
-|10|2|1MB|     17664.67    |    	15505.58      |   917.26       |
-|10|2|8MB|      10363.05    |      9323.60     |    914.62      |
-|10|4|4KB|      17708.62    |      12705.35    |    531.82      |
-|10|4|1MB|     11970.42    |     9804.57     |  536.31        |
-|10|4|8MB|      7957.9    |      6941.69     |    534.82      |
-|12|4|4KB|      16902.12    |       12065.14   |  511.95        |
-|12|4|1MB|      11478.86   |   9392.33       |   514.24       |
-|12|4|8MB|       7949.81   |   6760.49        |    513.06      |
+| Data | Parity | Vector size | AVX2 I/O (MiB/S) | no SIMD I/O (MiB/S) |
+|------|--------|-------------|------------------|---------------------|
+| 10   | 2      | 8KiB        | 35640.29         | 2226.84             |
+| 10   | 2      | 1MiB        | 	30136.69        | 2214.45             |
+| 10   | 4      | 8KiB        | 19936.79         | 1294.25             |
+| 10   | 4      | 1MiB        | 17845.68         | 1284.02             |
+| 12   | 4      | 8KiB        | 19072.93         | 1229.14             |
+| 12   | 4      | 1MiB        | 16851.19         | 1219.29             |
 
 ### Reconstruct:
 
 `I/O = (data + reconstruct_data_num) * vector_size / cost`
 
-| Data  | Parity  | Vector size | Reconstruct Data Num |  AVX512 I/O (MB/S) |
-|-------|---------|-------------|-------------|---------------|
-|10|4|4KB| 1         |      29830.36    |
-|10|4|4KB| 2        |     21649.61     |  
-|10|4|4KB| 3         |     17088.41      | 
-|10|4|4KB| 4         |    14567.26       | 
+| Data | Parity | Vector size | Reconstruct Data Num | AVX2 I/O (MiB/s) |
+|------|--------|-------------|----------------------|------------------|
+| 10   | 4      | 8KiB        | 1                    | 55775.91         |
+| 10   | 4      | 8KiB        | 2                    | 33037.90         |  
+| 10   | 4      | 8KiB        | 3                    | 23917.16         | 
+| 10   | 4      | 8KiB        | 4                    | 19363.26         | 
 
 ### Update:
 
 `I/O = (2 + parity_num + parity_num) * vector_size / cost`
 
-| Data  | Parity  | Vector size | AVX512 I/O (MB/S) |
-|-------|---------|-------------|-------------|
-|10|4|4KB|      36444.13    |
+| Data | Parity | Vector size | AVX2 I/O (MiB/S) |
+|------|--------|-------------|------------------|
+| 10   | 4      | 8KiB        | 55710.83         |
 
 ### Replace:
 
 `I/O = (parity_num + parity_num + replace_data_num) * vector_size / cost`
 
-| Data  | Parity  | Vector size | Replace Data Num |  AVX512 I/O (MB/S) |
-|-------|---------|-------------|-------------|---------------|
-|10|4|4KB| 1         |  78464.33        |  
-|10|4|4KB| 2        |     50068.71     |   
-|10|4|4KB| 3         |   38808.11        |  
-|10|4|4KB| 4         |    32457.60       |     
-|10|4|4KB| 5         |  28679.46         |  
-|10|4|4KB| 6         |    26151.85       |   
+| Data | Parity | Vector size | Replace Data Num | AVX2 I/O (MiB/S) |
+|------|--------|-------------|------------------|------------------|
+| 10   | 4      | 8KiB        | 1                | 116193.04        |  
+| 10   | 4      | 8KiB        | 2                | 65375.73         |   
+| 10   | 4      | 8KiB        | 3                | 48775.47         |  
+| 10   | 4      | 8KiB        | 4                | 40398.79         |     
+| 10   | 4      | 8KiB        | 5                | 35262.89         |  
+| 10   | 4      | 8KiB        | 6                | 31881.60         |   
 
 **PS:**
 
-*And we must know the benchmark test is quite different with encoding/decoding in practice.
+*We must know the benchmark test is quite different with encoding/decoding in practice.
 Because in benchmark test loops, the CPU Cache may help a lot.*
 
-## Links & Thanks
+## Acknowledgements
 >- [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon): It's the
 most commonly used Erasure Codes library in Go. Impressive performance, friendly API, 
 and it can support multi platforms(with fast Galois Field Arithmetic). Inspired me a lot.

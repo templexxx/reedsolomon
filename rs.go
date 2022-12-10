@@ -481,18 +481,17 @@ func (r *RS) checkUpdate(oldData []byte, newData []byte, row int, parity [][]byt
 
 // Replace replaces oldData vectors with 0 or replaces 0 with newData vectors.
 //
-// In practice,
-// If len(replaceRows) > dataNum-parityNum, it's better to use Encode,
-// because Replace need to read len(replaceRows) + parityNum vectors,
-// if replaceRows are too many, the cost maybe larger than Encode
-// (Encode only need read dataNum).
-// Think about an EC compute node, and dataNum+parityNum data nodes model.
-//
 // It's used in two situations:
 // 1. We didn't have enough data for filling in a stripe, but still did ec encode,
 // we need replace several zero vectors with new vectors which have data after we get enough data finally.
 // 2. After compact, we may have several useless vectors in a stripe,
 // we need replaces these useless vectors with zero vectors for free space.
+//
+// In practice,
+// If len(replaceRows) > dataNum-parityNum, it's better to use Encode,
+// because Replace need to read len(replaceRows) + parityNum vectors,
+// if replaceRows are too many, the cost maybe larger than Encode
+// (Encode only need read dataNum).
 //
 // Warn:
 // data's index & replaceRows must have the same sort.
