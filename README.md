@@ -21,7 +21,7 @@
 >- It's a kind of [Systematic Codes](https://en.wikipedia.org/wiki/Systematic_code), which means 
 the input data is embedded in the encoded output .
 >
->- [High Performance](https://github.com/templexxx/reedsolomon#performance): dozens GikB/s per physics core. 
+>- [High Performance](https://github.com/templexxx/reedsolomon#performance): dozens GiB/s per physics core. 
 >
 >- High Reliability: 
 >  1. At least two companies are using this library in their storage system.
