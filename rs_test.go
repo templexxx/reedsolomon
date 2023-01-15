@@ -189,7 +189,7 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 			t.Fatal(err)
 		}
 
-		survived, needReconst := genIdxRand(d, p, rand.Intn(d+p), rand.Intn(p+1))
+		survived, needReconst := genIdxForTest(d, p, rand.Intn(d+p), rand.Intn(p+1))
 		for _, i := range survived {
 			copy(act[i], exp[i])
 		}
@@ -366,7 +366,7 @@ func TestRS_getReconstMatrixFromCache(t *testing.T) {
 	var survived, needReconst []int // genReconstMatrix needs survived vectors & data vectors need to be reconstructed.
 	for {
 		var needReconstData int
-		survived, needReconst = genIdxRand(d, p, d, p)
+		survived, needReconst = genIdxForTest(d, p, d, p)
 		survived, needReconst, needReconstData, err = r.checkReconst(survived, needReconst)
 		if err != nil {
 			t.Fatal(err)
@@ -460,7 +460,7 @@ func BenchmarkRS_Reconst(b *testing.B) {
 	size := 8 * kib
 
 	for i := 1; i <= p; i++ {
-		survived, needReconst := genIdxRand(d, p, d+p-i, i)
+		survived, needReconst := genIdxForTest(d, p, d+p-i, i)
 		b.Run(fmt.Sprintf("(%d+%d)-%s-reconst_%d_data_vects-%s",
 			d, p, byteToStr(size), i, featToStr(getCPUFeature())),
 			func(b *testing.B) { benchReconst(b, d, p, size, survived, needReconst) })
@@ -506,7 +506,7 @@ func BenchmarkRS_checkReconst(b *testing.B) {
 			b.Fatal(err)
 		}
 		for i := 1; i <= p; i++ {
-			is, ir := genIdxRand(d, p, d, i)
+			is, ir := genIdxForTest(d, p, d, i)
 			b.Run(fmt.Sprintf("d:%d,p:%d,survived:%d,need_reconst:%d", d, p, len(is), len(ir)),
 				func(b *testing.B) {
 					b.ResetTimer()

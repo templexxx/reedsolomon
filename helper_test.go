@@ -56,8 +56,8 @@ func dedup(s []int) []int {
 	return s[:cnt-cntDup]
 }
 
-// generates survived & needReconst sorted indexes.
-func genIdxRand(d, p, survivedN, needReconstN int) ([]int, []int) {
+// generates survived & needReconst sorted indexes for testing randomly.
+func genIdxForTest(d, p, survivedN, needReconstN int) ([]int, []int) {
 	if survivedN < d {
 		survivedN = d
 	}
@@ -68,34 +68,34 @@ func genIdxRand(d, p, survivedN, needReconstN int) ([]int, []int) {
 		survivedN = d
 	}
 
-	idxR := genNeedReconstRand(d, p, needReconstN)
+	needReconst := randPermK(d+p, needReconstN)
 
-	idxS := make([]int, 0, survivedN)
+	survived := make([]int, 0, survivedN)
 
 	fullIdx := make([]int, d+p)
 	for i := range fullIdx {
 		fullIdx[i] = i
 	}
-	rand.Shuffle(d+p, func(i, j int) { // More chance to get balanced survived indexes
+	rand.Shuffle(d+p, func(i, j int) { // More chance to get balanced survived index
 		fullIdx[i], fullIdx[j] = fullIdx[j], fullIdx[i]
 	})
 
 	for i := 0; i < d+p; i++ {
-		if len(idxS) == survivedN {
+		if len(survived) == survivedN {
 			break
 		}
-		if !isIn(fullIdx[i], idxR) {
-			idxS = append(idxS, fullIdx[i])
+		if !isIn(fullIdx[i], needReconst) {
+			survived = append(survived, fullIdx[i])
 		}
 	}
 
-	sort.Ints(idxS)
-	sort.Ints(idxR)
+	sort.Ints(survived)
+	sort.Ints(needReconst)
 
-	return idxS, idxR
+	return survived, needReconst
 }
 
-func TestGenIdxForReconst(t *testing.T) {
+func TestGenIdxForTest(t *testing.T) {
 
 	d, p := 10, 4
 
@@ -103,14 +103,14 @@ func TestGenIdxForReconst(t *testing.T) {
 
 	for i := 0; i < d+p; i++ {
 		for j := 0; j < d+p; j++ {
-			is, ir := genIdxRand(d, p, 10, 4)
-			checkGenIdx(t, d, p, is, ir, ret)
+			is, ir := genIdxForTest(d, p, 10, 4)
+			checkGenIdxForTest(t, d, p, is, ir, ret)
 			ret = ret[:0]
 		}
 	}
 }
 
-func checkGenIdx(t *testing.T, d, p int, is, ir, all []int) {
+func checkGenIdxForTest(t *testing.T, d, p int, is, ir, all []int) {
 
 	for _, v := range is {
 		if v < 0 || v >= d+p {
@@ -136,22 +136,11 @@ func checkGenIdx(t *testing.T, d, p int, is, ir, all []int) {
 	}
 }
 
-func genNeedReconstRand(d, p, needReconstN int) []int {
+// generates first k integers from a pseudo-random permutation in [0,n)
+func randPermK(n, k int) []int {
 	rand.Seed(time.Now().UnixNano())
 
-	s := make([]int, needReconstN)
-	n := 0
-	for {
-		if n == needReconstN {
-			break
-		}
-		v := rand.Intn(d + p)
-		if !isIn(v, s) {
-			s[n] = v
-			n++
-		}
-	}
-	return s
+	return rand.Perm(n)[:k]
 }
 
 func featToStr(f int) string {

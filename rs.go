@@ -208,14 +208,14 @@ func (r *RS) encodePart(start, end int, dv, pv [][]byte, updateOnly bool) {
 // Reconst reconstructs missing vectors,
 // vects: All vectors, len(vects) = dataNum + parityNum.
 // survived: Survived data & parity indexes, len(survived) must >= dataNum.
-// needReconst: Vectors indexes which need to be reconstructed.
+// needReconst: Vectors index which need to be reconstructed.
 // needReconst has higher priority than survived:
 // e.g., survived: [1,2,3] needReconst [0,1] -> survived: [2,3] needReconst [0,1]
 // When len(survived) == 0, assuming all vectors survived, will be refreshed by needReconst later:
 // survived vectors must have correct data.
 //
 // e.g.,:
-// in 3+2, the whole indexes: [0,1,2,3,4],
+// in 3+2, the whole index: [0,1,2,3,4],
 // if vects[0,4] are lost & they need to be reconstructed
 // (Maybe you only need to reconstruct vects[0] when lost vects[0,4], so the needReconst should be [0], but not [0,4]).
 // the survived will be [1,2,3] ,and you must be sure that vects[1,2,3] have correct data,
@@ -260,8 +260,8 @@ func checkVectIdx(idx []int, d, p int) error {
 }
 
 // check arguments, return:
-// 1. survived indexes
-// 2. data & parity indexes which needed to be reconstructed
+// 1. survived index
+// 2. data & parity indexes which needed to be reconstructed (sorted after return)
 // 3. cnt of data vectors needed to be reconstructed.
 func (r *RS) checkReconst(survived, needReconst []int) (vs, nr []int, dn int, err error) {
 	if len(needReconst) == 0 {
@@ -280,12 +280,11 @@ func (r *RS) checkReconst(survived, needReconst []int) (vs, nr []int, dn int, er
 
 	status := make([]uint8, d+p)
 
-	if len(survived) == 0 {
+	if len(survived) == 0 { // Set all survived if no given survived index.
 		for i := range status {
 			status[i] = vectSurvived
 		}
 	}
-
 	for _, v := range survived {
 		status[v] = vectSurvived
 	}
@@ -507,8 +506,8 @@ func (r *RS) Replace(data [][]byte, replaceRows []int, parity [][]byte) (err err
 
 	// Make generator matrix for replacing.
 	//
-	// Values in replaceRows are row indexes of data,
-	// and also the column indexes of generator matrix
+	// Values in replaceRows are row index of data,
+	// and also the column index of generator matrix
 	gm := make([]byte, p*rn)
 	off := 0
 	for i := 0; i < p; i++ {

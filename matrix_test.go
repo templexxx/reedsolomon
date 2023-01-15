@@ -139,7 +139,7 @@ func TestMatrixInvert(t *testing.T) {
 func TestMakeEncMatrixForReconst(t *testing.T) {
 	d, p := 4, 4
 	em := makeEncodeMatrix(d, p)
-	survivied, _ := genIdxRand(d, p, d, p)
+	survivied, _ := genIdxForTest(d, p, d, p)
 	emr, err := em.makeEncMatrixForReconst(survivied)
 	if err != nil {
 		t.Fatal(err)
@@ -225,7 +225,7 @@ func TestEncMatrixInvertibleRandom(t *testing.T) {
 			}
 
 			encMatrix := makeEncodeMatrix(d, p)
-			survived, _ := genIdxRand(d, p, d, p)
+			survived, _ := genIdxForTest(d, p, d, p)
 			m := make([]byte, d*d)
 			for i := 0; i < d; i++ {
 				copy(m[i*d:i*d+d], encMatrix[survived[i]*d:survived[i]*d+d])
@@ -288,7 +288,7 @@ func benchMatrixInvertRun(b *testing.B, dps [][2]int) {
 		d, p := dp[0], dp[1]
 		b.Run(fmt.Sprintf("(%d+%d)", d, p), func(b *testing.B) {
 			m := makeEncodeMatrix(d, p)
-			survived, _ := genIdxRand(d, p, d, p)
+			survived, _ := genIdxForTest(d, p, d, p)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_, err := m.makeEncMatrixForReconst(survived)
