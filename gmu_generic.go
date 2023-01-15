@@ -3,7 +3,7 @@
 
 package reedsolomon
 
-func (g *gmu) init(feat int) {
+func (g *gmu) initFunc(feat int) {
 	g.mulVect = mulVectNoSIMD
 	g.mulVectXOR = mulVectXORNoSIMD
 }
