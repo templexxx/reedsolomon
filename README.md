@@ -1,151 +1,208 @@
-# Reed-Solomon
+# reedsolomon
 
-[![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Sourcegraph][9]][10]
+[![pkg.go.dev](https://pkg.go.dev/badge/github.com/templexxx/reedsolomon.svg)](https://pkg.go.dev/github.com/templexxx/reedsolomon)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Unit Test](https://github.com/templexxx/reedsolomon/actions/workflows/unit-test.yml/badge.svg)](https://github.com/templexxx/reedsolomon/actions/workflows/unit-test.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/templexxx/reedsolomon)](https://goreportcard.com/report/github.com/templexxx/reedsolomon)
 
-[1]: https://godoc.org/github.com/templexxx/reedsolomon?status.svg
-[2]: https://godoc.org/github.com/templexxx/reedsolomon
-[3]: https://img.shields.io/badge/license-MIT-blue.svg
-[4]: LICENSE
-[5]: https://github.com/templexxx/reedsolomon/workflows/unit-test/badge.svg
-[6]: https://github.com/templexxx/reedsolomon
-[7]: https://goreportcard.com/badge/github.com/templexxx/reedsolomon
-[8]: https://goreportcard.com/report/github.com/templexxx/reedsolomon
-[9]: https://sourcegraph.com/github.com/templexxx/reedsolomon/-/badge.svg
-[10]: https://sourcegraph.com/github.com/templexxx/reedsolomon?badge
+A high-performance, systematic Reed-Solomon erasure coding engine in pure Go.
 
+This repository focuses on two goals:
+- mathematically sound coding over `GF(2^8)`
+- low-latency, high-throughput implementation for storage systems
 
-## Introduction:
+## Why This Library
 
->- Erasure Codes(based on Reed-Solomon Codes) engine in pure Go.
->
->- It's a kind of [Systematic Codes](https://en.wikipedia.org/wiki/Systematic_code), which means 
-the input data is embedded in the encoded output .
->
->- [High Performance](https://github.com/templexxx/reedsolomon#performance): dozens GiB/s per physics core. 
->
->- High Reliability: 
->  1. At least two companies are using this library in their storage system.
-    (More than dozens PB data)
->  2. Full test of galois field calculation and invertible matrices
->   (You can also find the [mathematical proof](proof_invertible.md) in this repo).
->
->- Based on [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon) 
-& [Intel ISA-L](https://github.com/01org/isa-l) with some additional changes/optimizations.
->
->- It's the backend of [XRS](https://github.com/templexxx/xrs) (Erasure Codes
-which can save about 30% I/O in reconstruction process).
+- Pure Go implementation with optional AVX2 acceleration on x86.
+- Systematic code layout: original data vectors are embedded directly in the output stripe.
+- Cauchy-based encoding matrix with invertibility proof included in this repo.
+- Production-oriented APIs: `Encode`, `Reconst`, `Update`, and `Replace`.
+- Extensive tests for finite-field arithmetic, matrix operations, and end-to-end correctness.
 
-## Specification
-### Math
+## Install
 
->- Coding over in GF(2^8).
->
->- Primitive Polynomial: x^8 + x^4 + x^3 + x^2 + 1 (0x1d).
->
->- [Cauchy Matrix](matrix.go) is the generator matrix.
->   >-  Any sub-matrix of encoding matrix is invertible (See the proof [here](proof_invertible.md)). 
->
->- [Galois Field Tool](mathtool/gentbls/gentbls.go): Generate primitive polynomial,
-and it's log, exponent, multiply and inverse tables etc. 
->
->- [Inverse Matrices Tool](mathtool/cntinverse/cntinverse.go): Calculate the number of inverse matrices 
-with specific data & parity number.
->
+```bash
+go get github.com/templexxx/reedsolomon
+```
 
-[XP](https://github.com/drmingdrmer) has written an excellent article ([Here, in Chinese](http://drmingdrmer.github.io/tech/distributed/2017/02/01/ec.html)) about how
-Erasure Codes works and the math behind it. It's a good start to read it.
+## Quick Start
 
-### Accelerate
+```go
+package main
 
->- SIMD: [Screaming Fast Galois Field Arithmetic Using Intel SIMD Instructions](http://web.eecs.utk.edu/~jplank/plank/papers/FAST-2013-GF.html)
->
->- Reduce memory I/O: Write cache-friendly code. In the process of two matrices multiply, we will have to
-read data times, and keep the temporary results, then write to memory. If we could put more data into
-CPU's Cache but not read/write memory again and again, the performance should
-improve a lot. 
->
->- Cache inverse matrices: It'll save thousands ns, not much, but it's still meaningful
-for small data.
->
->- ...
+import (
+	"fmt"
 
-[Here](http://www.templex.xyz/blog/101/reedsolomon.html) (in Chinese) is an article about
-how to write a fast Erasure Codes engine. 
-(Written by me years ago, need update, but the main ideas still work)
+	rs "github.com/templexxx/reedsolomon"
+)
+
+func main() {
+	const (
+		dataNum   = 10
+		parityNum = 4
+		size      = 8 * 1024
+	)
+
+	codec, err := rs.New(dataNum, parityNum)
+	if err != nil {
+		panic(err)
+	}
+
+	// Stripe layout: [data vectors..., parity vectors...]
+	vects := make([][]byte, dataNum+parityNum)
+	for i := range vects {
+		vects[i] = make([]byte, size)
+	}
+
+	// Fill data vectors [0:dataNum) with your payload.
+	for i := 0; i < dataNum; i++ {
+		for j := 0; j < size; j++ {
+			vects[i][j] = byte(i + j)
+		}
+	}
+
+	// 1) Encode parity vectors.
+	if err := codec.Encode(vects); err != nil {
+		panic(err)
+	}
+
+	// 2) Reconstruct lost vectors (example: data #1, parity #11).
+	lost := []int{1, 11}
+	for _, idx := range lost {
+		for i := range vects[idx] {
+			vects[idx][i] = 0
+		}
+	}
+	survived := []int{0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13}
+	if err := codec.Reconst(vects, survived, lost); err != nil {
+		panic(err)
+	}
+
+	fmt.Println("encode + reconstruct succeeded")
+}
+```
+
+## API Overview
+
+- `Encode(vects [][]byte)`
+  - Generates parity vectors from data vectors.
+- `Reconst(vects [][]byte, survived []int, needReconst []int)`
+  - Reconstructs missing data/parity vectors from surviving vectors.
+- `Update(oldData, newData []byte, row int, parity [][]byte)`
+  - Incrementally updates parity when one data vector changes.
+- `Replace(data [][]byte, replaceRows []int, parity [][]byte)`
+  - Efficiently updates parity for replacing multiple data rows.
+
+## Mathematical Foundation
+
+- Field: `GF(2^8)`
+- Primitive polynomial: `x^8 + x^4 + x^3 + x^2 + 1` (`0x1d`)
+- Encoding matrix:
+  - upper part is identity matrix (systematic form)
+  - lower part is Cauchy matrix
+- Invertibility proof for reconstruction matrix:
+  - [proof_invertible.md](proof_invertible.md)
+
+Reference tools in this repo:
+- Galois-field table generator: [`mathtool/gentbls/gentbls.go`](mathtool/gentbls/gentbls.go)
+- Invertible-matrix counting tool: [`mathtool/cntinverse/cntinverse.go`](mathtool/cntinverse/cntinverse.go)
 
 ## Performance
 
-Performance depends mainly on:
+Performance depends on:
+- CPU instruction set support (AVX2 vs non-SIMD)
+- data/parity layout (`k + m`)
+- vector size and cache behavior
 
->- CPU instruction extension.
->
->- Number of data/parity row vectors.
+Benchmark platform:
 
-**Platform:** 
-
-```
+```text
 goos: linux
 goarch: amd64
-pkg: github.com/templexxx/reedsolomon
 cpu: 12th Gen Intel(R) Core(TM) i7-12700K
 ```
 
-**All test run on a single Core.**
+All numbers below are single-core results.
 
-### Encode:
+### Encode Throughput
 
 `I/O = (data + parity) * vector_size / cost`
 
-| Data | Parity | Vector size | AVX2 I/O (MiB/S) | no SIMD I/O (MiB/S) |
-|------|--------|-------------|------------------|---------------------|
-| 10   | 2      | 8KiB        | 35640.29         | 2226.84             |
-| 10   | 2      | 1MiB        | 	30136.69        | 2214.45             |
-| 10   | 4      | 8KiB        | 19936.79         | 1294.25             |
-| 10   | 4      | 1MiB        | 17845.68         | 1284.02             |
-| 12   | 4      | 8KiB        | 19072.93         | 1229.14             |
-| 12   | 4      | 1MiB        | 16851.19         | 1219.29             |
+| Data | Parity | Vector size | AVX2 (MiB/s) | No SIMD (MiB/s) |
+|------|--------|-------------|--------------|-----------------|
+| 10   | 2      | 8KiB        | 35640.29     | 2226.84         |
+| 10   | 2      | 1MiB        | 30136.69     | 2214.45         |
+| 10   | 4      | 8KiB        | 19936.79     | 1294.25         |
+| 10   | 4      | 1MiB        | 17845.68     | 1284.02         |
+| 12   | 4      | 8KiB        | 19072.93     | 1229.14         |
+| 12   | 4      | 1MiB        | 16851.19     | 1219.29         |
 
-### Reconstruct:
+### Reconstruct Throughput
 
 `I/O = (data + reconstruct_data_num) * vector_size / cost`
 
-| Data | Parity | Vector size | Reconstruct Data Num | AVX2 I/O (MiB/s) |
-|------|--------|-------------|----------------------|------------------|
-| 10   | 4      | 8KiB        | 1                    | 55775.91         |
-| 10   | 4      | 8KiB        | 2                    | 33037.90         |  
-| 10   | 4      | 8KiB        | 3                    | 23917.16         | 
-| 10   | 4      | 8KiB        | 4                    | 19363.26         | 
+| Data | Parity | Vector size | Reconstruct data num | AVX2 (MiB/s) |
+|------|--------|-------------|----------------------|--------------|
+| 10   | 4      | 8KiB        | 1                    | 55775.91     |
+| 10   | 4      | 8KiB        | 2                    | 33037.90     |
+| 10   | 4      | 8KiB        | 3                    | 23917.16     |
+| 10   | 4      | 8KiB        | 4                    | 19363.26     |
 
-### Update:
+### Update Throughput
 
 `I/O = (2 + parity_num + parity_num) * vector_size / cost`
 
-| Data | Parity | Vector size | AVX2 I/O (MiB/S) |
-|------|--------|-------------|------------------|
-| 10   | 4      | 8KiB        | 55710.83         |
+| Data | Parity | Vector size | AVX2 (MiB/s) |
+|------|--------|-------------|--------------|
+| 10   | 4      | 8KiB        | 55710.83     |
 
-### Replace:
+### Replace Throughput
 
 `I/O = (parity_num + parity_num + replace_data_num) * vector_size / cost`
 
-| Data | Parity | Vector size | Replace Data Num | AVX2 I/O (MiB/S) |
-|------|--------|-------------|------------------|------------------|
-| 10   | 4      | 8KiB        | 1                | 116193.04        |  
-| 10   | 4      | 8KiB        | 2                | 65375.73         |   
-| 10   | 4      | 8KiB        | 3                | 48775.47         |  
-| 10   | 4      | 8KiB        | 4                | 40398.79         |     
-| 10   | 4      | 8KiB        | 5                | 35262.89         |  
-| 10   | 4      | 8KiB        | 6                | 31881.60         |   
+| Data | Parity | Vector size | Replace data num | AVX2 (MiB/s) |
+|------|--------|-------------|------------------|--------------|
+| 10   | 4      | 8KiB        | 1                | 116193.04    |
+| 10   | 4      | 8KiB        | 2                | 65375.73     |
+| 10   | 4      | 8KiB        | 3                | 48775.47     |
+| 10   | 4      | 8KiB        | 4                | 40398.79     |
+| 10   | 4      | 8KiB        | 5                | 35262.89     |
+| 10   | 4      | 8KiB        | 6                | 31881.60     |
 
-**PS:**
+Notes:
+- Micro-benchmarks can overestimate real-world throughput due to cache locality and hot loops.
+- For representative results, benchmark with your target stripe sizes and I/O path.
 
-*We must know the benchmark test is quite different with encoding/decoding in practice.
-Because in benchmark test loops, the CPU Cache may help a lot.*
+To run benchmarks:
+
+```bash
+go test -bench BenchmarkRS_ -benchmem
+```
+
+## Correctness and Reliability
+
+- Full unit tests for GF arithmetic and matrix inversion behavior.
+- End-to-end tests for encode/reconstruct/update/replace.
+- Additional mathematical proof for invertibility in [`proof_invertible.md`](proof_invertible.md).
+
+Run tests:
+
+```bash
+go test -v ./...
+```
+
+## Compatibility Notes
+
+- Max vectors: `dataNum + parityNum <= 256`.
+- This project uses a Cauchy-style generator layout compatible with its own implementation.
+- Do not assume matrix compatibility with libraries that use different RS matrix construction strategies.
+
+## Related
+
+- [templexxx/xrs](https://github.com/templexxx/xrs): upper-layer erasure-coding (saving about 30% I/O in a reconstruction process) using this library.
 
 ## Acknowledgements
->- [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon): It's the
-most commonly used Erasure Codes library in Go. Impressive performance, friendly API, 
-and it can support multi platforms(with fast Galois Field Arithmetic). Inspired me a lot.
->
->- [Intel ISA-L](https://github.com/01org/isa-l): The ideas of Cauchy matrix and saving memory
-I/O are from it.
+
+- [klauspost/reedsolomon](https://github.com/klauspost/reedsolomon)
+- [intel/isa-l](https://github.com/intel/isa-l)
+- [FAST 2013 paper: SIMD GF arithmetic](http://web.eecs.utk.edu/~jplank/plank/papers/FAST-2013-GF.html)
