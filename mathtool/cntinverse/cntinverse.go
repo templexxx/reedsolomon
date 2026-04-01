@@ -7,8 +7,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// This tools will calculate the number of inverse matrices
-// with specific data & parity number.
+// This tool will calculate the number of inverse matrices
+// with specific data and parity number.
 package main
 
 import (
@@ -38,7 +38,7 @@ func main() {
 	k := float64(*data)
 
 	if k == 0 {
-		k = n / 2
+		k = n / 2 // the proof is in max_combi.md
 	}
 	fmt.Printf("num of inverse matrices for vectors ≈ %d, data: %d: %.f \n",
 		uint64(n),

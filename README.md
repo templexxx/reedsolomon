@@ -27,7 +27,7 @@ the input data is embedded in the encoded output .
 >  1. At least two companies are using this library in their storage system.
     (More than dozens PB data)
 >  2. Full test of galois field calculation and invertible matrices
->   (You can also find the [mathematical proof](invertible.jpg) in this repo).
+>   (You can also find the [mathematical proof](proof_invertible.md) in this repo).
 >
 >- Based on [Klauspost ReedSolomon](https://github.com/klauspost/reedsolomon) 
 & [Intel ISA-L](https://github.com/01org/isa-l) with some additional changes/optimizations.
@@ -43,7 +43,7 @@ which can save about 30% I/O in reconstruction process).
 >- Primitive Polynomial: x^8 + x^4 + x^3 + x^2 + 1 (0x1d).
 >
 >- [Cauchy Matrix](matrix.go) is the generator matrix.
->   >-  Any sub-matrix of encoding matrix is invertible (See the proof [here](invertible.jpg)). 
+>   >-  Any sub-matrix of encoding matrix is invertible (See the proof [here](proof_invertible.md)). 
 >
 >- [Galois Field Tool](mathtool/gentbls/gentbls.go): Generate primitive polynomial,
 and it's log, exponent, multiply and inverse tables etc. 
