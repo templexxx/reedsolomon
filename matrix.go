@@ -9,43 +9,40 @@ import (
 	"errors"
 )
 
-// matrix: row*column bytes,
-// I use one slice but not 2D slice,
-// because type matrix is only as encoding/generator matrix's
-// container, hundreds bytes at most,
-// so it maybe more cache-friendly and GC-friendly.
+// matrix stores row*column bytes in a single flat slice.
+// A 1D layout is used instead of a 2D slice because encoding/generator matrices
+// are usually small (at most a few hundred bytes), and this layout is generally
+// more cache-friendly and GC-friendly.
 type matrix []byte
 
-// makeSurvivedMatrix makes an encoding matrix.
-// High portion: Identity Matrix;
-// Lower portion: Cauchy Matrix.
-// The Encoding Matrix is as same as Intel ISA-L's gf_gen_cauchy1_matrix:
+// makeEncodeMatrix builds an encoding matrix.
+// Upper part: identity matrix.
+// Lower part: Cauchy matrix.
+// The encoding matrix matches Intel ISA-L's gf_gen_cauchy1_matrix:
 // https://github.com/intel/isa-l/blob/master/erasure_code/ec_base.c
 //
-// Warn:
-// It maybe not the common way to make an encoding matrix,
-// so it may corrupt when mix this lib with other erasure codes libs.
+// Note:
+// This is not the most common approach for building encoding matrices.
+// Mixing this library with other erasure-code implementations may produce
+// incompatible results.
 //
-// The common way to make an encoding matrix is using a
-// Vandermonde Matrix, then use elementary transformation
-// to make an identity matrix in the high portion of the matrix.
-// But it's a little complicated.
+// The common approach is to start from a Vandermonde matrix and use
+// elementary transformations to make the upper part identity.
+// That approach is slightly more complex.
 //
-// And there is a wrong way to use Vandermonde Matrix
-// (see Intel ISA-L, and this lib's document warn the issue),
-// in the wrong way, they use an identity matrix in the high portion,
-// and a Vandermonde matrix in the lower directly,
-// and this encoding matrix's sub-matrix maybe singular.
-// You can find a proof in invertible.jpeg.
+// A known incorrect pattern (documented in ISA-L and in this repository)
+// is to combine an upper identity matrix with a lower Vandermonde matrix directly;
+// that can produce singular sub-matrices.
+// See invertible.jpeg for a proof.
 func makeEncodeMatrix(d, p int) matrix {
 	r := d + p
 	m := make([]byte, r*d)
-	// Create identity matrix upper.
+	// Build upper identity matrix.
 	for i := 0; i < d; i++ {
 		m[i*d+i] = 1
 	}
 
-	// Create cauchy matrix below. (1/(i + j), 0 <= j < d, d <= i < 2*d)
+	// Build lower Cauchy matrix: 1/(i+j), where 0 <= j < d and d <= i < 2*d.
 	off := d * d // Skip the identity matrix.
 	for i := d; i < r; i++ {
 		for j := 0; j < d; j++ {
@@ -66,8 +63,8 @@ func (m matrix) makeReconstMatrix(survived, needReconst []int) (rm matrix, err e
 	return
 }
 
-// makeEncMatrixForReconst makes an encoding matrix by calculating
-// the inverse matrix of survived encoding matrix.
+// makeEncMatrixForReconst computes an encoding matrix for reconstruction by
+// inverting the survived portion of the original encoding matrix.
 func (m matrix) makeEncMatrixForReconst(survived []int) (em matrix, err error) {
 	d := len(survived)
 	m2 := make([]byte, d*d)
@@ -84,8 +81,7 @@ func (m matrix) makeEncMatrixForReconst(survived []int) (em matrix, err error) {
 var ErrNotSquare = errors.New("not a square matrix")
 var ErrSingularMatrix = errors.New("matrix is singular")
 
-// invert calculates m's inverse matrix,
-// and return it or any error.
+// invert computes and returns m's inverse matrix.
 func (m matrix) invert(n int) (inv matrix, err error) {
 	if n*n != len(m) {
 		err = ErrNotSquare
@@ -96,17 +92,17 @@ func (m matrix) invert(n int) (inv matrix, err error) {
 	left := mm[:n*n]
 	copy(left, m) // Copy m, avoiding side effect.
 
-	// Make an identity matrix.
+	// Build the identity matrix on the right side.
 	inv = mm[n*n:]
 	for i := 0; i < n; i++ {
 		inv[i*n+i] = 1
 	}
 
 	for i := 0; i < n; i++ {
-		// Pivoting.
+		// Pivot if needed.
 		if left[i*n+i] == 0 {
-			// Find a row with non-zero in current column and swap.
-			// If there is no one, means it's a singular matrix.
+			// Find and swap with a row whose current-column value is non-zero.
+			// If none exists, the matrix is singular.
 			var j int
 			for j = i + 1; j < n; j++ {
 				if left[j*n+i] != 0 {
@@ -123,16 +119,15 @@ func (m matrix) invert(n int) (inv matrix, err error) {
 
 		if left[i*n+i] != 1 {
 			v := inverseTbl[left[i*n+i]] // 1/pivot
-			// Scale row.
+			// Scale the row so the pivot becomes 1.
 			for j := 0; j < n; j++ {
 				left[i*n+j] = gfMul(left[i*n+j], v)
 				inv[i*n+j] = gfMul(inv[i*n+j], v)
 			}
 		}
 
-		// Use elementary transformation to
-		// make all elements(except pivot) in the left matrix
-		// become 0.
+		// Use elementary row operations to eliminate all non-pivot entries
+		// in the current column.
 		for j := 0; j < n; j++ {
 			if j == i {
 				continue
@@ -151,7 +146,7 @@ func (m matrix) invert(n int) (inv matrix, err error) {
 	return
 }
 
-// swap square matrix row[i] & row[j], col = n
+// swap swaps row i and row j of an n*n matrix.
 func (m matrix) swap(i, j, n int) {
 	for k := 0; k < n; k++ {
 		m[i*n+k], m[j*n+k] = m[j*n+k], m[i*n+k]

@@ -1,6 +1,6 @@
 package reedsolomon
 
-// galois field multiplying unit
+// gmu is the Galois-field multiply unit.
 type gmu struct {
 	// output = c * input
 	mulVect func(c byte, input, output []byte)
@@ -22,7 +22,7 @@ func mulVectXORNoSIMD(c byte, input, output []byte) {
 	}
 }
 
-// a * b
+// gfMul returns a*b in GF(2^8).
 func gfMul(a, b uint8) uint8 {
 	return mulTbl[a][b]
 }

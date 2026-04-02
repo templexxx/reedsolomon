@@ -153,10 +153,10 @@ func TestMakeEncMatrixForReconst(t *testing.T) {
 	}
 }
 
-// Check all sub matrices when there is a lost.
-// Warn:
-// Don't set too big numbers,
-// it may have too many combinations, the test will never finish.
+// Check all sub-matrices when one or more vectors are missing.
+// Warning:
+// Do not use very large numbers here.
+// The number of combinations can explode and make the test impractical.
 func TestEncMatrixInvertibleAll(t *testing.T) {
 	testEncMatrixInvertible(t, 10, 4)
 	testEncMatrixInvertible(t, 15, 4)
@@ -166,7 +166,7 @@ func testEncMatrixInvertible(t *testing.T, d, p int) {
 	encMatrix := makeEncodeMatrix(d, p)
 	var bitmap uint64
 	cnt := 0
-	// Lost more, bitmap bigger.
+	// More missing vectors means a larger bitmap range.
 	var min uint64 = (1 << (d + 1)) - 1 ^ (1 << (d - 1)) // Min value when lost one data row vector.
 	var max uint64 = ((1 << d) - 1) << p                 // Max value when lost parity-num data row vectors.
 	for bitmap = min; bitmap <= max; bitmap++ {
@@ -194,8 +194,7 @@ func testEncMatrixInvertible(t *testing.T, d, p int) {
 			t.Fatalf("encode matrix is singular, d:%d, p:%d, dpHas:%#v", d, p, dpHas)
 		}
 
-		// Check A * A' = I or not,
-		// ensure nothing wrong in the invert process.
+		// Verify A * A' = I to validate inversion.
 		if !mul(im, m, d).isIdentity(d) {
 			t.Fatalf("matrix invert wrong, d:%d, p:%d, dpHas:%#v", d, p, dpHas)
 		}
@@ -206,12 +205,12 @@ func testEncMatrixInvertible(t *testing.T, d, p int) {
 var Invertible = flag.Bool("invert-test", false,
 	"checking encoding matrices' sub-matrices are invertible or not by pick up sub-matrix randomly")
 
-// Check Encoding Matrices' sub-matrices are invertible.
-// Randomly pick up sub-matrix every data+parity pair.
+// Check whether encoding matrix sub-matrices are invertible.
+// Randomly sample one sub-matrix for each data+parity pair.
 //
-// This test may cost about 100s, unless modify codes about
-// galois field or matrix, there is no need to run it every time,
-// so skip the test by default, avoiding waste time in develop process.
+// This test may take about 100 seconds.
+// Unless you modified Galois-field or matrix logic, running it every time is unnecessary,
+// so it is skipped by default to save development time.
 func TestEncMatrixInvertibleRandom(t *testing.T) {
 
 	if !*Invertible {
@@ -236,8 +235,7 @@ func TestEncMatrixInvertibleRandom(t *testing.T) {
 				t.Fatalf("encode matrix is singular, d:%d, p:%d, dpHas:%#v", d, p, survived)
 			}
 
-			// Check A * A' = I or not,
-			// ensure nothing wrong in the invert process.
+			// Verify A * A' = I to validate inversion.
 			if !mul(im, m, d).isIdentity(d) {
 				t.Fatalf("matrix invert wrong, d:%d, p:%d, dpHas:%#v", d, p, survived)
 			}
@@ -245,7 +243,7 @@ func TestEncMatrixInvertibleRandom(t *testing.T) {
 	}
 }
 
-// square matrix a * square matrix b = out
+// mul multiplies two n*n matrices.
 func mul(a, b matrix, n int) (out matrix) {
 
 	out = make([]byte, n*n)

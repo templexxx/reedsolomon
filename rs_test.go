@@ -21,8 +21,8 @@ const (
 	testSize      = kib // enough for covering branches when using SIMD & GF8
 )
 
-// Check basic matrix multiply.
-// Powered by MATLAB.
+// Check basic matrix multiplication.
+// Expected results are validated with MATLAB.
 func TestRS_mul(t *testing.T) {
 	d, p := 5, 5
 	r, err := New(d, p)
@@ -48,8 +48,8 @@ func TestRS_mul(t *testing.T) {
 	}
 }
 
-// generate_matrix * vects, basic matrix multiply.
-// For verifying encoding.
+// mul performs basic matrix multiplication (generator_matrix * vects)
+// and is used to verify encoding.
 func (r *RS) mul(vects [][]byte) error {
 	r.GenMatrix.mul(vects, r.DataNum, r.ParityNum, len(vects[0]))
 	return nil
@@ -79,7 +79,7 @@ func TestRS_Encode(t *testing.T) {
 
 	switch getCPUFeature() {
 	case featAVX2:
-		testEncode(t, d, p, max, featAVX2, featNoSIMD) // comparing with verified feature for speeding up.
+		testEncode(t, d, p, max, featAVX2, featNoSIMD) // Compare against a verified feature for faster checks.
 	}
 }
 
@@ -194,7 +194,7 @@ func testReconst(t *testing.T, d, p, size, loop int) {
 			copy(act[i], exp[i])
 		}
 
-		// Pollute vectors need to be reconstructed.
+		// Randomly corrupt vectors that need reconstruction.
 		for _, nr := range needReconst {
 			if rand.Intn(4) == 1 { // 1/4 chance.
 				fillRandom(act[nr])
@@ -356,14 +356,15 @@ func TestRS_getReconstMatrixFromCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Enable Cache.
+	// Enable cache.
 	r.inverseCacheEnabled = true
 	r.inverseCache = new(sync.Map)
 	r.inverseCacheMax = 1
 
 	rand.Seed(time.Now().UnixNano())
 
-	var survived, needReconst []int // genReconstMatrix needs survived vectors & data vectors need to be reconstructed.
+	// getReconstMatrix needs survived vectors and data vectors to reconstruct.
+	var survived, needReconst []int
 	for {
 		var needReconstData int
 		survived, needReconst = genIdxForTest(d, p, d, p)

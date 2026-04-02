@@ -3,12 +3,11 @@
 // Use of this source code is governed by the MIT License
 // that can be found in the LICENSE file.
 
-// Package reedsolomon implements Erasure Codes (systematic codes),
-// it's based on:
-// Reed-Solomon Codes over GF(2^8).
-// Primitive Polynomial:  x^8+x^4+x^3+x^2+1.
+// Package reedsolomon implements systematic erasure coding based on
+// Reed-Solomon codes over GF(2^8), using the primitive polynomial
+// x^8+x^4+x^3+x^2+1.
 //
-// Galois Filed arithmetic using Intel SIMD instructions (AVX512 or AVX2).
+// Galois field arithmetic is accelerated with SIMD instructions (AVX2).
 package reedsolomon
 
 import (
@@ -20,25 +19,24 @@ import (
 	xor "github.com/templexxx/xorsimd"
 )
 
-// RS Reed-Solomon Codes receiver.
+// RS is a Reed-Solomon encoder/decoder.
 type RS struct {
 	DataNum   int // DataNum is the number of data row vectors.
 	ParityNum int // ParityNum is the number of parity row vectors.
 
-	// CPU's feature.
-	// With SIMD feature, performance will be much better.
+	// CPU feature flags. SIMD significantly improves performance.
 	cpuFeat int
 
 	encMatrix matrix // Encoding matrix.
 	GenMatrix matrix // Generator matrix.
 
 	inverseCacheEnabled bool
-	inverseCache        *sync.Map // Inverse matrix's cache.
-	// Limitation of cache, total inverse matrix = C(DataNum+ParityNum, DataNum)
+	inverseCache        *sync.Map // Cache of inverse matrices.
+	// Cache limit: total possible inverse matrices = C(DataNum+ParityNum, DataNum)
 	// = (DataNum+ParityNum)! / ParityNum!DataNum!
-	// If there is no limitation, memory will explode. See mathtool/cntinverse for details.
+	// Without a cap, memory usage can grow too large. See mathtool/cntinverse for details.
 	inverseCacheMax uint64
-	inverseCacheN   uint64 // cached inverse matrix.
+	inverseCacheN   uint64 // Number of cached inverse matrices.
 
 	*gmu
 }
@@ -52,7 +50,7 @@ const (
 	maxInverseMatrixCapInCache = 16 * mib // Keeping inverse matrix cache small, 16 MiB is enough for most cases.
 )
 
-// New create an RS with specific data & parity numbers.
+// New creates an RS instance with the given data and parity shard counts.
 func New(dataNum, parityNum int) (r *RS, err error) {
 
 	return newWithFeature(dataNum, parityNum, featUnknown)
@@ -69,7 +67,7 @@ func newWithFeature(dataNum, parityNum, feat int) (r *RS, err error) {
 	r = &RS{DataNum: d, ParityNum: p,
 		encMatrix: e, GenMatrix: g}
 
-	if r.DataNum+r.ParityNum <= 64 { // I'm using 64bit bitmap as inverse matrix cache's key.
+	if r.DataNum+r.ParityNum <= 64 { // The cache key is a 64-bit bitmap.
 		r.inverseCacheEnabled = true
 		r.inverseCache = new(sync.Map)
 		r.inverseCacheMax = maxInverseMatrixCapInCache / uint64(r.DataNum) / uint64(r.DataNum)
@@ -86,7 +84,7 @@ func newWithFeature(dataNum, parityNum, feat int) (r *RS, err error) {
 	return
 }
 
-// CPU Features.
+// CPU features.
 const (
 	featUnknown = iota
 	featAVX2
@@ -101,8 +99,8 @@ func getCPUFeature() int {
 }
 
 // Encode encodes data for generating parity.
-// It multiplies generator matrix by vects[:r.DataNum] to get parity vectors,
-// and write into vects[r.DataNum:].
+// It multiplies the generator matrix by vects[:r.DataNum] and writes
+// the resulting parity vectors into vects[r.DataNum:].
 func (r *RS) Encode(vects [][]byte) (err error) {
 	err = r.checkEncode(vects)
 	if err != nil {
@@ -135,11 +133,11 @@ func (r *RS) checkEncode(vects [][]byte) (err error) {
 	return
 }
 
-// encode data piece by piece.
-// Split vectors for cache-friendly (see func getSplitSize(n int) int for details).
+// encode processes data in chunks.
+// Vectors are split for better cache locality (see getSplitSize for details).
 //
-// updateOnly: means update old results by XOR new results, but not write new results directly.
-// You can see Methods Encode and Update to figure out difference.
+// updateOnly means "XOR new results into existing output" instead of overwriting.
+// See Encode and Update for the difference.
 func (r *RS) encode(vects [][]byte, updateOnly bool) {
 	dv, pv := vects[:r.DataNum], vects[r.DataNum:]
 	size := len(vects[0])
@@ -155,9 +153,8 @@ func (r *RS) encode(vects [][]byte, updateOnly bool) {
 	}
 }
 
-// size must be divisible by 16,
-// it's the smallest size for SIMD instructions,
-// see code block one16b in *_amd64.s for more details.
+// The chunk size must be a multiple of 16, which is the minimum SIMD width.
+// See one16b in *_amd64.s for details.
 func getSplitSize(n int) int {
 	l1d := cpu.X86.Cache.L1D
 	if l1d <= 0 { // Cannot detect cache size(-1) or CPU is not X86(0).
@@ -167,8 +164,8 @@ func getSplitSize(n int) int {
 	if n < 16 {
 		return 16
 	}
-	// Half of L1 Data Cache Size is an empirical data.
-	// Fit L1 Data Cache Size, but won't pollute too much in the next round.
+	// Using half of L1 data cache is an empirical choice:
+	// it fits cache while reducing cache pollution across rounds.
 	if n < l1d/2 {
 		return (n >> 4) << 4
 	}
@@ -205,21 +202,22 @@ func (r *RS) encodePart(start, end int, dv, pv [][]byte, updateOnly bool) {
 	}
 }
 
-// Reconst reconstructs missing vectors,
-// vects: All vectors, len(vects) = dataNum + parityNum.
-// survived: Survived data & parity indexes, len(survived) must >= dataNum.
-// needReconst: Vectors index which need to be reconstructed.
-// needReconst has higher priority than survived:
+// Reconst reconstructs missing vectors.
+// vects contains all vectors, and len(vects) must be dataNum + parityNum.
+// survived contains indexes of available data/parity vectors and must contain
+// at least dataNum indexes.
+// needReconst contains indexes to reconstruct.
+// needReconst takes precedence over survived:
 // e.g., survived: [1,2,3] needReconst [0,1] -> survived: [2,3] needReconst [0,1]
-// When len(survived) == 0, assuming all vectors survived, will be refreshed by needReconst later:
-// survived vectors must have correct data.
+// If len(survived) == 0, all vectors are initially treated as survived, then
+// overwritten by needReconst.
+// Survived vectors must contain valid data.
 //
-// e.g.,:
-// in 3+2, the whole index: [0,1,2,3,4],
-// if vects[0,4] are lost & they need to be reconstructed
-// (Maybe you only need to reconstruct vects[0] when lost vects[0,4], so the needReconst should be [0], but not [0,4]).
-// the survived will be [1,2,3] ,and you must be sure that vects[1,2,3] have correct data,
-// results will be written into vects[needReconst] directly.
+// Example:
+// In a 3+2 layout, indexes are [0,1,2,3,4]. If vects[0] and vects[4] are lost,
+// but only vects[0] is required, pass needReconst = [0] (not [0,4]).
+// Then survived is [1,2,3], and vects[1], vects[2], vects[3] must be valid.
+// Reconstructed results are written directly into vects[needReconst].
 func (r *RS) Reconst(vects [][]byte, survived, needReconst []int) (err error) {
 
 	var dataNeedReconstN int
@@ -259,10 +257,10 @@ func checkVectIdx(idx []int, d, p int) error {
 	return nil
 }
 
-// check arguments, return:
-// 1. survived index
-// 2. data & parity indexes which needed to be reconstructed (sorted after return)
-// 3. cnt of data vectors needed to be reconstructed.
+// checkReconst validates arguments and returns:
+// 1. survived indexes
+// 2. data/parity indexes to reconstruct (sorted)
+// 3. number of data vectors to reconstruct
 func (r *RS) checkReconst(survived, needReconst []int) (vs, nr []int, dn int, err error) {
 	if len(needReconst) == 0 {
 		err = ErrNoNeedReconst
@@ -280,7 +278,7 @@ func (r *RS) checkReconst(survived, needReconst []int) (vs, nr []int, dn int, er
 
 	status := make([]uint8, d+p)
 
-	if len(survived) == 0 { // Set all survived if no given survived index.
+	if len(survived) == 0 { // Mark all vectors as survived if none are provided.
 		for i := range status {
 			status[i] = vectSurvived
 		}
@@ -291,9 +289,9 @@ func (r *RS) checkReconst(survived, needReconst []int) (vs, nr []int, dn int, er
 
 	fullDataRequired := false
 	for _, v := range needReconst {
-		status[v] = vectNeedReconst // Origin survived status will be replaced if they're conflicting.
+		status[v] = vectNeedReconst // Overrides survived status on conflict.
 		if !fullDataRequired && v >= d {
-			fullDataRequired = true // Need to reconstruct parity, full data vectors required.
+			fullDataRequired = true // Reconstructing parity requires all data vectors.
 		}
 	}
 	if fullDataRequired {
@@ -334,7 +332,7 @@ func (r *RS) reconstData(vects [][]byte, survived, needReconst []int) (err error
 	}
 
 	d := r.DataNum
-	survived = survived[:d] // Only need dataNum vectors for reconstruction.
+	survived = survived[:d] // Reconstruction only needs dataNum vectors.
 
 	gm, err := r.getReconstMatrix(survived, needReconst)
 	if err != nil {
@@ -416,13 +414,13 @@ func (r *RS) getReconstMatrixFromCache(survived, needReconst []int) (rm matrix, 
 func makeInverseCacheKey(survived []int) uint64 {
 	var key uint64
 	for _, i := range survived {
-		key += 1 << uint8(i) // elements in survived are unique and sorted, okay to use add.
+		key += 1 << uint8(i) // survived is unique/sorted, so addition is safe.
 	}
 	return key
 }
 
-// Update updates parity_data when one data_vect changes.
-// row: It's the new data's index in the whole vectors.
+// Update updates parity vectors when one data vector changes.
+// row is the index of the changed data vector in the full vector set.
 func (r *RS) Update(oldData []byte, newData []byte, row int, parity [][]byte) (err error) {
 
 	err = r.checkUpdate(oldData, newData, row, parity)
@@ -430,11 +428,11 @@ func (r *RS) Update(oldData []byte, newData []byte, row int, parity [][]byte) (e
 		return
 	}
 
-	// Step1: old_data xor new_data.
+	// Step 1: old_data XOR new_data.
 	buf := make([]byte, len(oldData))
 	xor.Encode(buf, [][]byte{oldData, newData})
 
-	// Step2: recalculate parity.
+	// Step 2: recalculate parity.
 	vects := make([][]byte, 1+r.ParityNum)
 	vects[0] = buf
 	gm := make([]byte, r.ParityNum)
@@ -478,22 +476,19 @@ func (r *RS) checkUpdate(oldData []byte, newData []byte, row int, parity [][]byt
 	return
 }
 
-// Replace replaces oldData vectors with 0 or replaces 0 with newData vectors.
+// Replace swaps oldData vectors with zero vectors, or swaps zero vectors with newData.
 //
-// It's used in two situations:
-// 1. We didn't have enough data for filling in a stripe, but still did ec encode,
-// we need replace several zero vectors with new vectors which have data after we get enough data finally.
-// 2. After compact, we may have several useless vectors in a stripe,
-// we need replaces these useless vectors with zero vectors for free space.
+// It is used in two common cases:
+// 1. A stripe is encoded before all data arrives. Later, placeholder zero vectors
+// are replaced with actual data vectors.
+// 2. After compaction, some vectors become unused and are replaced by zero vectors
+// to free space.
 //
-// In practice,
-// If len(replaceRows) > dataNum-parityNum, it's better to use Encode,
-// because Replace need to read len(replaceRows) + parityNum vectors,
-// if replaceRows are too many, the cost maybe larger than Encode
-// (Encode only need read dataNum).
+// In practice, when len(replaceRows) > dataNum-parityNum, Encode is usually better:
+// Replace reads len(replaceRows)+parityNum vectors, and may cost more than Encode
+// (which only reads dataNum vectors).
 //
-// Warn:
-// data's index & replaceRows must have the same sort.
+// Note: the order of data must match the order of replaceRows.
 func (r *RS) Replace(data [][]byte, replaceRows []int, parity [][]byte) (err error) {
 
 	err = r.checkReplace(data, replaceRows, parity)
@@ -504,10 +499,10 @@ func (r *RS) Replace(data [][]byte, replaceRows []int, parity [][]byte) (err err
 	d, p := r.DataNum, r.ParityNum
 	rn := len(replaceRows)
 
-	// Make generator matrix for replacing.
+	// Build the generator matrix for replacement.
 	//
-	// Values in replaceRows are row index of data,
-	// and also the column index of generator matrix
+	// Values in replaceRows are row indexes in data, and also column indexes
+	// in the generator matrix.
 	gm := make([]byte, p*rn)
 	off := 0
 	for i := 0; i < p; i++ {

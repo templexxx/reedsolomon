@@ -38,7 +38,7 @@ func TestDedup(t *testing.T) {
 	}
 }
 
-// dedup removes duplicates from a given slice
+// dedup removes duplicate items from a slice.
 func dedup(s []int) []int {
 
 	sort.Ints(s)
@@ -56,7 +56,7 @@ func dedup(s []int) []int {
 	return s[:cnt-cntDup]
 }
 
-// generates survived & needReconst sorted indexes for testing randomly.
+// genIdxForTest generates sorted survived and needReconst indexes for random tests.
 func genIdxForTest(d, p, survivedN, needReconstN int) ([]int, []int) {
 	if survivedN < d {
 		survivedN = d
@@ -76,7 +76,7 @@ func genIdxForTest(d, p, survivedN, needReconstN int) ([]int, []int) {
 	for i := range fullIdx {
 		fullIdx[i] = i
 	}
-	rand.Shuffle(d+p, func(i, j int) { // More chance to get balanced survived index
+	rand.Shuffle(d+p, func(i, j int) { // Improves chances of balanced survived indexes.
 		fullIdx[i], fullIdx[j] = fullIdx[j], fullIdx[i]
 	})
 
@@ -136,7 +136,7 @@ func checkGenIdxForTest(t *testing.T, d, p int, is, ir, all []int) {
 	}
 }
 
-// generates first k integers from a pseudo-random permutation in [0,n)
+// randPermK returns the first k integers from a pseudo-random permutation of [0, n).
 func randPermK(n, k int) []int {
 	rand.Seed(time.Now().UnixNano())
 

@@ -3,8 +3,8 @@
 // Use of this source code is governed by the MIT License
 // that can be found in the LICENSE file.
 
-// This tool generates primitive polynomial,
-// and it's log, exponent, multiply and inverse tables etc.
+// This tool generates primitive polynomials and related tables,
+// including log, exponent, multiplication, and inverse tables.
 package main
 
 import (
@@ -39,7 +39,7 @@ func main() {
 	body := fmt.Sprintf(title+"%v", pss)
 	w.WriteString(body)
 
-	// Set primitive polynomial here to generator tables.
+	// Set the primitive polynomial used to generate tables.
 	// Default: x^8+x^4+x^3+x^2+1
 	var primitivePolynomial polynomial
 	primitivePolynomial[0] = 1
@@ -82,21 +82,21 @@ func main() {
 	w.Flush()
 }
 
-// Generate primitive Polynomial.
+// genPrimitivePolynomial generates primitive polynomials.
 func genPrimitivePolynomial() []polynomial {
-	// Drop Polynomial x，so the constant term must be 1,
-	// so there are 2^(deg-1) Polynomials.
+	// Excluding term x^0 is not allowed; the constant term must be 1.
+	// So there are 2^(deg-1) candidate polynomials.
 	cnt := 1 << (deg - 1)
 	var polynomials []polynomial
 	var p polynomial
 	p[0] = 1
 	p[deg] = 1
-	// Generate all Polynomials.
+	// Generate all candidate polynomials.
 	for i := 0; i < cnt; i++ {
 		p = genPolynomial(p, 1)
 		polynomials = append(polynomials, p)
 	}
-	// Drop Polynomial x+1, so the cnt of Polynomials is odd.
+	// Drop x+1 divisors by keeping only polynomials with an odd count of 1 bits.
 	var psRaw []polynomial
 	for _, p := range polynomials {
 		var n int
@@ -109,14 +109,14 @@ func genPrimitivePolynomial() []polynomial {
 			psRaw = append(psRaw, p)
 		}
 	}
-	// Order of primitive element == 2^deg -1
+	// The order of a primitive element must be 2^deg - 1.
 	var ps []polynomial
 	for _, p := range psRaw {
 		lenTable := (1 << deg) - 1
 		table := genExpTable(p, lenTable)
 		var numOf1 int
 		for _, v := range table {
-			// Cnt 1 in ExpTable.
+			// Count occurrences of 1 in the exponent table.
 			if int(v) == 1 {
 				numOf1++
 			}
@@ -233,11 +233,11 @@ func genMulTableHalf(mulTable [256][256]byte) (low [][]byte, high [][]byte) {
 				result = mulTable[i][j]
 
 			}
-			// j & 00001111, [0,15]
+			// j & 00001111 -> [0,15]
 			if (j & 0xf) == j {
 				low[i][j] = result
 			}
-			// j & 11110000, [240,255]
+			// j & 11110000 -> [240,255]
 			if (j & 0xf0) == j {
 				high[i][j>>4] = result
 			}
