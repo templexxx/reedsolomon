@@ -4,7 +4,6 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Unit Test](https://github.com/templexxx/reedsolomon/actions/workflows/unit-test.yml/badge.svg)](https://github.com/templexxx/reedsolomon/actions/workflows/unit-test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/templexxx/reedsolomon)](https://goreportcard.com/report/github.com/templexxx/reedsolomon)
-[![Sourcegraph](https://sourcegraph.com/github.com/templexxx/reedsolomon/-/badge.svg)](https://sourcegraph.com/github.com/templexxx/reedsolomon?badge)
 
 A high-performance, systematic Reed-Solomon erasure coding engine in pure Go.
 
