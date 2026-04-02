@@ -7,24 +7,21 @@ package reedsolomon
 
 import (
 	"bytes"
-	"math/rand"
 	"testing"
-	"time"
 )
 
 func TestGMU(t *testing.T) {
-	max := testSize
+	maxSize := testSize
 
 	switch getCPUFeature() {
 	case featAVX2:
-		testGMU(t, max, featAVX2, featNoSIMD)
+		testGMU(t, maxSize, featAVX2, featNoSIMD)
+	default:
+		t.Logf("no SIMD feature detected, skip comparing encoding results with no-SIMD implementation")
 	}
 }
 
 func testGMU(t *testing.T, maxSize, feat, cmpFeat int) {
-
-	rand.Seed(time.Now().UnixNano())
-
 	fs := featToStr(feat)
 
 	start, n := 1, 1

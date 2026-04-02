@@ -73,13 +73,15 @@ func TestRS_Encode(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 
 	d, p := testDataNum, testParityNum
-	max := testSize
+	maxSize := testSize
 
-	testEncode(t, d, p, max, featNoSIMD, featUnknown)
+	testEncode(t, d, p, maxSize, featNoSIMD, featUnknown)
 
 	switch getCPUFeature() {
 	case featAVX2:
-		testEncode(t, d, p, max, featAVX2, featNoSIMD) // Compare against a verified feature for faster checks.
+		testEncode(t, d, p, maxSize, featAVX2, featNoSIMD) // Compare against a verified feature for faster checks.
+	default:
+		t.Logf("no SIMD feature detected, skip comparing encoding results with no-SIMD implementation")
 	}
 }
 
@@ -414,8 +416,7 @@ func BenchmarkRS_Encode(b *testing.B) {
 	}
 
 	var feats []int
-	switch getCPUFeature() {
-	case featAVX2:
+	if getCPUFeature() == featAVX2 {
 		feats = append(feats, featAVX2)
 	}
 	feats = append(feats, featNoSIMD)

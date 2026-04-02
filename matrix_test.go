@@ -10,9 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"math/bits"
-	"math/rand"
 	"testing"
-	"time"
 )
 
 func TestMakeEncodeMatrix(t *testing.T) {
@@ -34,7 +32,6 @@ func TestMakeEncodeMatrix(t *testing.T) {
 func TestMatrixSwap(t *testing.T) {
 	n := 7
 	m := make([]byte, n*n)
-	rand.Seed(time.Now().UnixNano())
 	fillRandom(m)
 	exp := make([]byte, n*n)
 	copy(exp, m)

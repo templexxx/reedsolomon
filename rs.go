@@ -223,7 +223,7 @@ func (r *RS) Reconst(vects [][]byte, survived, needReconst []int) (err error) {
 	var dataNeedReconstN int
 	survived, needReconst, dataNeedReconstN, err = r.checkReconst(survived, needReconst)
 	if err != nil {
-		if err == ErrNoNeedReconst {
+		if errors.Is(err, ErrNoNeedReconst) {
 			return nil
 		}
 		return

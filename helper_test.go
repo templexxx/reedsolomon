@@ -1,6 +1,7 @@
 package reedsolomon
 
 import (
+	crand "crypto/rand"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -9,8 +10,7 @@ import (
 )
 
 func TestDedup(t *testing.T) {
-
-	rand.Seed(time.Now().UnixNano())
+	rng := newTestRand()
 
 	round := 1024
 	minN := 4
@@ -18,7 +18,7 @@ func TestDedup(t *testing.T) {
 	s := make([]int, maxN)
 
 	for i := 0; i < round; i++ {
-		n := rand.Intn(maxN + 1)
+		n := rng.Intn(maxN + 1)
 		if n < minN {
 			n = minN
 		}
@@ -58,6 +58,8 @@ func dedup(s []int) []int {
 
 // genIdxForTest generates sorted survived and needReconst indexes for random tests.
 func genIdxForTest(d, p, survivedN, needReconstN int) ([]int, []int) {
+	rng := newTestRand()
+
 	if survivedN < d {
 		survivedN = d
 	}
@@ -68,7 +70,7 @@ func genIdxForTest(d, p, survivedN, needReconstN int) ([]int, []int) {
 		survivedN = d
 	}
 
-	needReconst := randPermK(d+p, needReconstN)
+	needReconst := randPermK(rng, d+p, needReconstN)
 
 	survived := make([]int, 0, survivedN)
 
@@ -76,7 +78,7 @@ func genIdxForTest(d, p, survivedN, needReconstN int) ([]int, []int) {
 	for i := range fullIdx {
 		fullIdx[i] = i
 	}
-	rand.Shuffle(d+p, func(i, j int) { // Improves chances of balanced survived indexes.
+	rng.Shuffle(d+p, func(i, j int) { // Improves chances of balanced survived indexes.
 		fullIdx[i], fullIdx[j] = fullIdx[j], fullIdx[i]
 	})
 
@@ -137,10 +139,12 @@ func checkGenIdxForTest(t *testing.T, d, p int, is, ir, all []int) {
 }
 
 // randPermK returns the first k integers from a pseudo-random permutation of [0, n).
-func randPermK(n, k int) []int {
-	rand.Seed(time.Now().UnixNano())
+func randPermK(rng *rand.Rand, n, k int) []int {
+	return rng.Perm(n)[:k]
+}
 
-	return rand.Perm(n)[:k]
+func newTestRand() *rand.Rand {
+	return rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
 func featToStr(f int) string {
@@ -155,7 +159,9 @@ func featToStr(f int) string {
 }
 
 func fillRandom(p []byte) {
-	rand.Read(p)
+	if _, err := crand.Read(p); err != nil {
+		panic(err)
+	}
 }
 
 func byteToStr(n int) string {
