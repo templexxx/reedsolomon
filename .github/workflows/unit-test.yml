@@ -1,35 +1,29 @@
 name: unit-test
+
 on:
   push:
+    branches:
+      - master
+      - release/*
   pull_request:
+    branches:
+      - master
 
 jobs:
   test:
-    strategy:
-      matrix:
-        go-version:
-          - 1.18.x
-        os:
-          - ubuntu-latest
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Install Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: checkout
+      - name: Check out code
         uses: actions/checkout@v2
 
-      - name: cache
-        uses: actions/cache@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
         with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: test
-        run: |
-          go test -v -race
+          go-version: 1.25.4
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Run test
+        run: go test -v
